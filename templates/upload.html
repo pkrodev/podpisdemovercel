@@ -5,25 +5,21 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Podpis PDF</title>
   <style>
-    :root { --bg:#0b0f19; --card:#121a2a; --muted:#8aa0c6; --text:#eaf1ff; --btn:#4f8cff; }
-    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#070a12,#0b0f19);color:var(--text)}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;color:#111}
     .wrap{max-width:920px;margin:0 auto;padding:28px 16px}
-    .hero{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
-    h1{margin:0;font-size:28px}
-    p{margin:0;color:var(--muted);line-height:1.4}
-    .card{background:rgba(18,26,42,.9);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:18px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
-    .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-    input[type=file]{width:100%;padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.25);color:var(--text)}
-    button{cursor:pointer;padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:var(--btn);color:#07101f;font-weight:800}
-    .hint{margin-top:10px;color:var(--muted);font-size:14px}
+    .card{background:#fff;border:1px solid #e7e8ee;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+    h1{margin:0 0 8px;font-size:28px}
+    p{margin:0 0 16px;color:#555;line-height:1.4}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    input[type=file]{flex:1;min-width:240px;padding:12px;border-radius:12px;border:1px solid #d7d9e2;background:#fff}
+    button{cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid #111;background:#111;color:#fff;font-weight:800}
+    .hint{margin-top:10px;color:#666;font-size:14px}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="hero">
-      <h1>Podpis PDF</h1>
-      <p>Wrzuć PDF na komputerze, otwórz link / QR na tablecie i podpisz palcem.</p>
-    </div>
+    <h1>Podpis PDF</h1>
+    <p>Wrzuć PDF na komputerze, otwórz link/QR na tablecie i podpisz palcem.</p>
 
     <div class="card">
       <form action="/upload" method="post" enctype="multipart/form-data">
@@ -31,7 +27,7 @@
           <input type="file" name="file" accept="application/pdf" required />
           <button type="submit">Wyślij PDF</button>
         </div>
-        <div class="hint">Tip: po uploadzie dostaniesz link + QR do otwarcia na tablecie.</div>
+        <div class="hint">Po uploadzie dostaniesz link + QR. (Wersja demo nie zapisuje podpisanego PDF.)</div>
       </form>
     </div>
   </div>

@@ -1,8 +1,7 @@
+# api/index.py
 import os
 import uuid
 import base64
-import hmac
-import hashlib
 from io import BytesIO
 from pathlib import Path
 
@@ -19,18 +18,19 @@ from flask import (
     jsonify,
 )
 
+# =============================
+# Ścieżki (Vercel: używamy /tmp)
+# =============================
 API_DIR = Path(__file__).resolve().parent
 ROOT_DIR = API_DIR.parent
 
-TMP_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "pdf_sign_app"
+TMP_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "pdf_sign_demo"
 DOCS_DIR = TMP_ROOT / "docs"
 RENDERS_DIR = TMP_ROOT / "renders"
-SIGNED_DIR = TMP_ROOT / "signed"
 
-for d in (DOCS_DIR, RENDERS_DIR, SIGNED_DIR):
+for d in (DOCS_DIR, RENDERS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
-SECRET_KEY = os.environ.get("PDF_HMAC_SECRET", "CHANGE_ME_LONG_RANDOM_SECRET")
 ALLOWED_EXT = {"pdf"}
 
 
@@ -48,11 +48,31 @@ def safe_doc_id(doc_id: str) -> str:
     return doc_id
 
 
-def compute_hmac(data: bytes) -> str:
-    return hmac.new(SECRET_KEY.encode("utf-8"), data, hashlib.sha256).hexdigest()
+def cleanup_doc(doc_id: str):
+    """
+    DEMO: czyścimy wszystko po podpisie (nic nie zapisujemy).
+    """
+    try:
+        p = doc_path(doc_id)
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+
+    try:
+        for f in RENDERS_DIR.glob(f"{doc_id}_p*.png"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
+    """
+    Renderuje strony PDF do PNG w /tmp (Vercel).
+    """
     pdf = doc_path(doc_id)
     if not pdf.exists():
         abort(404, "PDF not found")
@@ -69,6 +89,52 @@ def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
     return out
 
 
+def _collect_pages_from_request():
+    """
+    Obsługuje:
+    1) multipart/form-data: page_<index> = PNG blob (preferowane na mobile)
+    2) JSON: { pages: [{index, dataURL}] } (fallback)
+    Zwraca listę (idx:int, png_bytes:bytes)
+    """
+    ctype = (request.content_type or "").lower()
+
+    # 1) Multipart
+    if "multipart/form-data" in ctype:
+        pages = []
+        for key, storage in request.files.items():
+            if not key.startswith("page_"):
+                continue
+            try:
+                idx = int(key.split("_", 1)[1])
+            except Exception:
+                continue
+            png_bytes = storage.read()
+            if png_bytes:
+                pages.append((idx, png_bytes))
+        return pages
+
+    # 2) JSON fallback
+    payload = request.get_json(silent=True) or {}
+    out = []
+    for item in payload.get("pages", []):
+        try:
+            idx = int(item.get("index", -1))
+        except Exception:
+            continue
+        data_url = item.get("dataURL", "")
+        if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
+            continue
+        try:
+            png_bytes = base64.b64decode(data_url.split(",", 1)[1])
+        except Exception:
+            continue
+        out.append((idx, png_bytes))
+    return out
+
+
+# =============================
+# Flask
+# =============================
 app = Flask(
     __name__,
     template_folder=str(ROOT_DIR / "templates"),
@@ -126,51 +192,12 @@ def sign(doc_id):
     return render_template("sign.html", doc_id=doc_id, pages=pages)
 
 
-def _collect_pages_from_request():
-    """
-    Obsługuje:
-    1) multipart/form-data: page_<index> = PNG blob
-    2) JSON: { pages: [{index, dataURL}] }
-    Zwraca listę (idx:int, png_bytes:bytes)
-    """
-    ctype = (request.content_type or "").lower()
-
-    # 1) Multipart (preferowane na mobile)
-    if "multipart/form-data" in ctype:
-        pages = []
-        for key, storage in request.files.items():
-            if not key.startswith("page_"):
-                continue
-            try:
-                idx = int(key.split("_", 1)[1])
-            except Exception:
-                continue
-            png_bytes = storage.read()
-            if png_bytes:
-                pages.append((idx, png_bytes))
-        return pages
-
-    # 2) JSON fallback
-    payload = request.get_json(silent=True) or {}
-    out = []
-    for item in payload.get("pages", []):
-        try:
-            idx = int(item.get("index", -1))
-        except Exception:
-            continue
-        data_url = item.get("dataURL", "")
-        if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
-            continue
-        try:
-            png_bytes = base64.b64decode(data_url.split(",", 1)[1])
-        except Exception:
-            continue
-        out.append((idx, png_bytes))
-    return out
-
-
 @app.post("/api/sign/<string:doc_id>")
 def api_sign(doc_id):
+    """
+    DEMO: przyjmujemy podpisy (PNG z canvasa), ale NIE tworzymy podpisanego PDF.
+    Zwracamy tylko komunikat i czyścimy pliki.
+    """
     doc_id = safe_doc_id(doc_id)
     pdf_path = doc_path(doc_id)
     if not pdf_path.exists():
@@ -180,44 +207,18 @@ def api_sign(doc_id):
     if not pages:
         return jsonify({"ok": False, "error": "No signature data received"}), 400
 
-    out_bytes = BytesIO()
-    with fitz.open(pdf_path) as doc:
-        for idx, png_bytes in pages:
-            if idx < 0 or idx >= len(doc):
-                continue
-            page = doc.load_page(idx)
-            rect = page.rect
-            page.insert_image(rect, stream=png_bytes, keep_proportion=False, overlay=True)
-        doc.save(out_bytes)
+    # (Opcjonalnie) prosta walidacja: czy w ogóle jest co wysłać
+    # np. minimalna liczba bajtów, żeby nie przyjmować pustych blobów
+    useful = any(len(png_bytes) > 2000 for _, png_bytes in pages)
+    if not useful:
+        return jsonify({"ok": False, "error": "Signature looks empty"}), 400
 
-    signed_pdf = out_bytes.getvalue()
-    digest = compute_hmac(signed_pdf)[:16]
-    filename = f"{doc_id}__{digest}_signed.pdf"
-    signed_path = SIGNED_DIR / filename
-    signed_path.write_bytes(signed_pdf)
+    # DEMO: sprzątamy i zwracamy komunikat
+    cleanup_doc(doc_id)
 
     return jsonify(
         {
             "ok": True,
-            "filename": filename,
-            "success_url": url_for("success", filename=filename),
-            "download_url": url_for("download", filename=filename),
+            "message": "Dokument został podpisany. Koniec wersji demonstracyjnej.",
         }
     )
-
-
-@app.get("/success/<path:filename>")
-def success(filename):
-    return render_template(
-        "success.html",
-        filename=filename,
-        download_url=url_for("download", filename=filename),
-    )
-
-
-@app.get("/download/<path:filename>")
-def download(filename):
-    fpath = SIGNED_DIR / filename
-    if not fpath.exists():
-        abort(404, "Signed PDF not found")
-    return send_from_directory(str(SIGNED_DIR), filename, as_attachment=True)

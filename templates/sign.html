@@ -5,67 +5,99 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Podpis PDF — {{ doc_id }}</title>
   <style>
-    :root { --bg:#0b0f19; --card:#121a2a; --muted:#8aa0c6; --text:#eaf1ff; --btn:#4f8cff; --danger:#ff5c7a; }
-    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#070a12,#0b0f19);color:var(--text);overscroll-behavior:none}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:#f6f7fb;color:#111;
+      overscroll-behavior:none;
+    }
     .wrap{max-width:1100px;margin:0 auto;padding:14px 12px 26px}
+
+    /* Sticky header, 2 linie: akcje + status/hint */
     .bar{
       position:sticky;top:0;z-index:50;
-      background:rgba(11,15,25,.75);
+      background:rgba(255,255,255,.92);
       backdrop-filter: blur(10px);
-      border-bottom:1px solid rgba(255,255,255,.08);
-      padding:12px 0;
+      border-bottom:1px solid #e7e8ee;
     }
-    .bar-inner{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .bar-inner{padding:12px}
+    .row{
+      display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    }
     .title{font-weight:900}
-    .status{margin-left:auto;color:var(--muted);font-size:14px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap}
     button{
-      cursor:pointer;padding:12px 14px;border-radius:14px;
-      border:1px solid rgba(255,255,255,.12);
-      background:rgba(0,0,0,.25);color:var(--text);font-weight:900
+      cursor:pointer;padding:12px 14px;border-radius:12px;
+      border:1px solid #111;background:#fff;color:#111;font-weight:900
     }
-    button.primary{background:var(--btn);color:#07101f}
-    button.danger{background:rgba(255,92,122,.15);border-color:rgba(255,92,122,.35)}
-    .hint{color:var(--muted);font-size:14px;margin-top:8px}
+    button.primary{background:#111;color:#fff}
+    button.danger{border-color:#b00020;color:#b00020}
+    .statusline{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}
+    .hint{color:#666;font-size:14px}
+    .status{color:#333;font-size:14px;font-weight:700}
+
     .page{
-      margin-top:14px;
-      background:rgba(18,26,42,.9);
-      border:1px solid rgba(255,255,255,.08);
-      border-radius:18px;
-      padding:12px;
-      box-shadow:0 12px 40px rgba(0,0,0,.35)
+      margin-top:14px;background:#fff;border:1px solid #e7e8ee;border-radius:16px;
+      padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.06)
     }
-    .pagehead{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-    .pagehead .muted{color:var(--muted);font-size:14px}
+    .pagehead{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+    .pagehead .muted{color:#666;font-size:14px}
+    .pagehead .spacer{flex:1}
+
     .stage{
       position:relative;
       width:100%;
       border-radius:14px;
       overflow:hidden;
-      border:1px solid rgba(255,255,255,.08);
+      border:1px solid #e7e8ee;
       background:#fff;
-      touch-action:none; /* ważne dla pointer events na mobile */
     }
     img.pdf{display:block;width:100%;height:auto}
+
+    /* NAJWAŻNIEJSZE dla Android Chrome */
     canvas.sig{
       position:absolute;left:0;top:0;
       width:100%;height:100%;
-      z-index:10;       /* ważne: canvas NAD obrazem */
+      z-index:10;
       pointer-events:auto;
-      touch-action:none; /* ważne */
+      touch-action:none;            /* blokuje scroll podczas rysowania */
+      -webkit-user-select:none;
+      user-select:none;
+      -webkit-touch-callout:none;
     }
+
+    /* Modal demo */
+    .modal{
+      position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(0,0,0,.45);z-index:999;
+      padding:18px;
+    }
+    .modal.show{display:flex}
+    .modal-card{
+      width:min(520px,100%);
+      background:#fff;border-radius:16px;border:1px solid #e7e8ee;
+      padding:18px;box-shadow:0 12px 40px rgba(0,0,0,.25)
+    }
+    .modal-card h2{margin:0 0 10px}
+    .modal-card p{margin:0;color:#333;line-height:1.4}
+    .modal-card .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
   </style>
 </head>
 <body>
   <div class="bar">
-    <div class="wrap">
-      <div class="bar-inner">
+    <div class="wrap bar-inner">
+      <div class="row">
         <div class="title">Podpis PDF</div>
-        <button class="primary" id="submitBtn">Zapisz i generuj PDF</button>
-        <button class="danger" id="clearAllBtn" type="button">Wyczyść wszystko</button>
-        <div class="status" id="status">Gotowe</div>
+        <div class="actions">
+          <button class="primary" id="submitBtn">Zakończ podpis</button>
+          <button class="danger" id="clearAllBtn" type="button">Wyczyść wszystko</button>
+        </div>
       </div>
-      <div class="hint">
-        Rysuj palcem na dokumencie. Jeśli strona przewija się podczas rysowania — przytrzymaj palec i rysuj na samym dokumencie.
+
+      <div class="statusline">
+        <div class="hint">Rysuj palcem na dokumencie. (Android Chrome: podpis powinien działać od razu)</div>
+        <div class="status" id="status">Gotowe</div>
       </div>
     </div>
   </div>
@@ -75,8 +107,9 @@
       <div class="page" data-idx="{{ p.idx }}">
         <div class="pagehead">
           <strong>Strona {{ p.idx + 1 }}</strong>
-          <span class="muted">Podpisz w dowolnym miejscu</span>
-          <button class="danger clearBtn" type="button" style="margin-left:auto">Wyczyść stronę</button>
+          <span class="muted">podpisz w dowolnym miejscu</span>
+          <span class="spacer"></span>
+          <button class="danger clearBtn" type="button">Wyczyść stronę</button>
         </div>
 
         <div class="stage" id="stage-{{ p.idx }}">
@@ -87,6 +120,17 @@
     {% endfor %}
   </div>
 
+  <div class="modal" id="modal">
+    <div class="modal-card">
+      <h2 id="modalTitle">Gotowe</h2>
+      <p id="modalText">Dokument został podpisany. Koniec wersji demonstracyjnej.</p>
+      <div class="btns">
+        <button class="primary" id="modalOk">OK</button>
+        <button id="modalClear">Wyczyść i zamknij</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 (() => {
   const docId = "{{ doc_id }}";
@@ -94,28 +138,35 @@
   const submitBtn = document.getElementById("submitBtn");
   const clearAllBtn = document.getElementById("clearAllBtn");
 
+  const modal = document.getElementById("modal");
+  const modalText = document.getElementById("modalText");
+  const modalOk = document.getElementById("modalOk");
+  const modalClear = document.getElementById("modalClear");
+
   const canvases = [];
   const ctxs = [];
   const dirty = [];
-
   const DPR = () => (window.devicePixelRatio || 1);
 
-  function setStatus(t) { statusEl.textContent = t; }
+  function setStatus(t){ statusEl.textContent = t; }
 
-  function resizeCanvasToStage(idx) {
-    const stage = document.getElementById(`stage-${idx}`);
-    const canvas = document.getElementById(`c-${idx}`);
+  function resizeToImage(idx){
     const img = document.getElementById(`img-${idx}`);
+    const canvas = document.getElementById(`c-${idx}`);
+    if (!img || !canvas) return;
 
-    const rect = stage.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
+    // Klucz: bierzemy realny rozmiar WYŚWIETLANEGO obrazka
+    const w = img.clientWidth;
+    const h = img.clientHeight;
+    if (!w || !h) return;
 
     const ratio = DPR();
-    canvas.width = Math.round(rect.width * ratio);
-    canvas.height = Math.round(rect.height * ratio);
+    canvas.width = Math.round(w * ratio);
+    canvas.height = Math.round(h * ratio);
 
     const ctx = canvas.getContext("2d");
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0); // rysujemy w CSS px
+    // rysujemy w CSS px
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -124,152 +175,146 @@
     ctxs[idx] = ctx;
   }
 
-  function makeDrawer(idx) {
+  function pointFromClient(canvas, clientX, clientY){
+    const r = canvas.getBoundingClientRect();
+    return { x: clientX - r.left, y: clientY - r.top };
+  }
+
+  function setupPage(idx){
     const canvas = document.getElementById(`c-${idx}`);
-    const stage = document.getElementById(`stage-${idx}`);
+    const img = document.getElementById(`img-${idx}`);
     const pageEl = document.querySelector(`.page[data-idx="${idx}"]`);
     const clearBtn = pageEl.querySelector(".clearBtn");
 
     canvases[idx] = canvas;
     dirty[idx] = false;
 
-    // ResizeObserver = bardziej niezawodne na mobile (zmiana orientacji, pasek URL itd.)
-    const ro = new ResizeObserver(() => resizeCanvasToStage(idx));
-    ro.observe(stage);
+    // dopasuj canvas po załadowaniu obrazka i przy resize/orientacji
+    if (img.complete) resizeToImage(idx);
+    else img.addEventListener("load", () => resizeToImage(idx));
 
-    // startowe dopasowanie po załadowaniu obrazka
-    const img = document.getElementById(`img-${idx}`);
-    if (img.complete) resizeCanvasToStage(idx);
-    else img.addEventListener("load", () => resizeCanvasToStage(idx));
+    window.addEventListener("resize", () => resizeToImage(idx));
+    window.addEventListener("orientationchange", () => setTimeout(() => resizeToImage(idx), 150));
 
-    const ctx = () => ctxs[idx];
-
-    function pointFromClient(clientX, clientY) {
-      const r = canvas.getBoundingClientRect();
-      return { x: clientX - r.left, y: clientY - r.top };
-    }
-
+    // --- DRAW ENGINE (Android Chrome friendly) ---
     let drawing = false;
     let last = null;
 
-    function drawLine(p) {
-      const c = ctx();
-      if (!c || !last) return;
-      c.beginPath();
-      c.moveTo(last.x, last.y);
-      c.lineTo(p.x, p.y);
-      c.stroke();
+    // gate: unikamy dublowania pointer+touch
+    let mode = null; // "pointer" albo "touch"
+
+    function drawTo(p){
+      const ctx = ctxs[idx];
+      if (!ctx || !last) return;
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
       last = p;
       dirty[idx] = true;
     }
 
-    // Prefer Pointer Events, ale dodajemy fallback Touch (iOS/Safari bywa kapryśne)
-    const hasPointer = "PointerEvent" in window;
+    // POINTER
+    canvas.addEventListener("pointerdown", (e) => {
+      mode = "pointer";
+      e.preventDefault();
+      e.stopPropagation();
+      drawing = true;
+      canvas.setPointerCapture?.(e.pointerId);
+      last = pointFromClient(canvas, e.clientX, e.clientY);
+    });
 
-    if (hasPointer) {
-      canvas.addEventListener("pointerdown", (e) => {
-        e.preventDefault();
-        drawing = true;
-        canvas.setPointerCapture?.(e.pointerId);
-        last = pointFromClient(e.clientX, e.clientY);
-      });
+    canvas.addEventListener("pointermove", (e) => {
+      if (mode !== "pointer" || !drawing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      drawTo(pointFromClient(canvas, e.clientX, e.clientY));
+    });
 
-      canvas.addEventListener("pointermove", (e) => {
-        if (!drawing) return;
-        e.preventDefault();
-        drawLine(pointFromClient(e.clientX, e.clientY));
-      });
+    const endPointer = (e) => {
+      if (mode !== "pointer") return;
+      e?.preventDefault?.();
+      drawing = false; last = null;
+    };
 
-      const end = (e) => {
-        e?.preventDefault?.();
-        drawing = false;
-        last = null;
-      };
+    canvas.addEventListener("pointerup", endPointer);
+    canvas.addEventListener("pointercancel", endPointer);
+    canvas.addEventListener("pointerleave", endPointer);
 
-      canvas.addEventListener("pointerup", end);
-      canvas.addEventListener("pointercancel", end);
-      canvas.addEventListener("pointerleave", end);
-    } else {
-      // Touch fallback
-      canvas.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        const t = e.touches[0];
-        drawing = true;
-        last = pointFromClient(t.clientX, t.clientY);
-      }, { passive: false });
+    // TOUCH fallback (passive:false!)
+    canvas.addEventListener("touchstart", (e) => {
+      if (mode === "pointer") return; // pointer wygrał
+      mode = "touch";
+      e.preventDefault();
+      e.stopPropagation();
+      const t = e.touches[0];
+      drawing = true;
+      last = pointFromClient(canvas, t.clientX, t.clientY);
+    }, { passive:false });
 
-      canvas.addEventListener("touchmove", (e) => {
-        if (!drawing) return;
-        e.preventDefault();
-        const t = e.touches[0];
-        drawLine(pointFromClient(t.clientX, t.clientY));
-      }, { passive: false });
+    canvas.addEventListener("touchmove", (e) => {
+      if (mode !== "touch" || !drawing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const t = e.touches[0];
+      drawTo(pointFromClient(canvas, t.clientX, t.clientY));
+    }, { passive:false });
 
-      canvas.addEventListener("touchend", (e) => {
-        e.preventDefault();
-        drawing = false;
-        last = null;
-      }, { passive: false });
-
-      // Mouse fallback
-      canvas.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        drawing = true;
-        last = pointFromClient(e.clientX, e.clientY);
-      });
-      window.addEventListener("mousemove", (e) => {
-        if (!drawing) return;
-        drawLine(pointFromClient(e.clientX, e.clientY));
-      });
-      window.addEventListener("mouseup", () => {
-        drawing = false;
-        last = null;
-      });
-    }
+    canvas.addEventListener("touchend", (e) => {
+      if (mode !== "touch") return;
+      e.preventDefault();
+      drawing = false; last = null;
+    }, { passive:false });
 
     clearBtn.addEventListener("click", () => {
-      const c = ctx();
-      if (!c) return;
-      c.clearRect(0, 0, canvas.width, canvas.height);
+      const ctx = ctxs[idx];
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       dirty[idx] = false;
+      setStatus("Wyczyszczono stronę");
     });
   }
 
   document.querySelectorAll(".page").forEach(el => {
     const idx = parseInt(el.getAttribute("data-idx"), 10);
-    makeDrawer(idx);
+    setupPage(idx);
   });
 
   clearAllBtn.addEventListener("click", () => {
     canvases.forEach((canvas, i) => {
       if (!canvas) return;
-      const c = ctxs[i];
-      c?.clearRect(0, 0, canvas.width, canvas.height);
+      const ctx = ctxs[i];
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
       dirty[i] = false;
     });
-    setStatus("Wyczyszczono");
+    setStatus("Wyczyszczono wszystko");
   });
 
-  async function canvasToBlob(canvas) {
+  async function canvasToBlob(canvas){
     return await new Promise((resolve) => {
-      if (canvas.toBlob) {
-        canvas.toBlob((b) => resolve(b), "image/png");
-      } else {
-        // fallback (stare przeglądarki)
-        const dataURL = canvas.toDataURL("image/png");
-        const b64 = dataURL.split(",")[1];
-        const bin = atob(b64);
-        const len = bin.length;
-        const arr = new Uint8Array(len);
-        for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
-        resolve(new Blob([arr], { type: "image/png" }));
-      }
+      canvas.toBlob((b) => resolve(b), "image/png");
     });
   }
 
+  function openModal(text){
+    modalText.textContent = text;
+    modal.classList.add("show");
+  }
+  function closeModal(){
+    modal.classList.remove("show");
+  }
+
+  modalOk.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+
+  modalClear.addEventListener("click", () => {
+    clearAllBtn.click();
+    closeModal();
+  });
+
   submitBtn.addEventListener("click", async () => {
     submitBtn.disabled = true;
-    setStatus("Przygotowanie…");
+    setStatus("Sprawdzanie podpisu…");
 
     try {
       const fd = new FormData();
@@ -293,24 +338,18 @@
       }
 
       setStatus("Wysyłanie…");
-      const res = await fetch(`/api/sign/${docId}`, {
-        method: "POST",
-        body: fd
-      });
+      const res = await fetch(`/api/sign/${docId}`, { method:"POST", body: fd });
 
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t || "Błąd serwera");
-      }
-
+      if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Błąd");
 
       setStatus("Gotowe ✅");
-      window.location.href = data.success_url;
+      openModal(data.message || "Dokument został podpisany. Koniec wersji demonstracyjnej.");
     } catch (err) {
       console.error(err);
       setStatus("Błąd: " + (err?.message || err));
+    } finally {
       submitBtn.disabled = false;
     }
   });
