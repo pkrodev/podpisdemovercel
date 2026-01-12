@@ -1,4 +1,3 @@
-# api/index.py
 import os
 import uuid
 import base64
@@ -9,11 +8,17 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 import qrcode
-from flask import Flask, request, abort, url_for, render_template, send_file, send_from_directory, jsonify
+from flask import (
+    Flask,
+    request,
+    abort,
+    url_for,
+    render_template,
+    send_file,
+    send_from_directory,
+    jsonify,
+)
 
-# =============================
-# Ścieżki (Vercel: używamy /tmp)
-# =============================
 API_DIR = Path(__file__).resolve().parent
 ROOT_DIR = API_DIR.parent
 
@@ -26,25 +31,28 @@ for d in (DOCS_DIR, RENDERS_DIR, SIGNED_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 SECRET_KEY = os.environ.get("PDF_HMAC_SECRET", "CHANGE_ME_LONG_RANDOM_SECRET")
-
 ALLOWED_EXT = {"pdf"}
+
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
+
 def doc_path(doc_id: str) -> Path:
     return DOCS_DIR / f"{doc_id}.pdf"
 
+
 def safe_doc_id(doc_id: str) -> str:
-    # minimalna sanity-check (doc_id generujemy sami)
     if not doc_id or any(c for c in doc_id if c not in "0123456789abcdef"):
         abort(400, "Invalid doc_id")
     return doc_id
 
+
 def compute_hmac(data: bytes) -> str:
     return hmac.new(SECRET_KEY.encode("utf-8"), data, hashlib.sha256).hexdigest()
 
-def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.5):
+
+def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
     pdf = doc_path(doc_id)
     if not pdf.exists():
         abort(404, "PDF not found")
@@ -57,12 +65,10 @@ def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.5):
             png_name = f"{doc_id}_p{i+1}.png"
             png_path = RENDERS_DIR / png_name
             pix.save(png_path)
-            out.append({"idx": i, "name": png_name, "w": pix.width, "h": pix.height})
+            out.append({"idx": i, "name": png_name})
     return out
 
-# =============================
-# Flask (templates z /templates)
-# =============================
+
 app = Flask(
     __name__,
     template_folder=str(ROOT_DIR / "templates"),
@@ -70,9 +76,11 @@ app = Flask(
 
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64MB
 
+
 @app.get("/")
 def index():
     return render_template("upload.html")
+
 
 @app.post("/upload")
 def upload():
@@ -84,7 +92,7 @@ def upload():
     if not allowed_file(f.filename):
         abort(400, "Only PDF allowed")
 
-    doc_id = uuid.uuid4().hex[:12]  # hex -> łatwy safe check
+    doc_id = uuid.uuid4().hex[:12]
     pdf_path = doc_path(doc_id)
     f.save(pdf_path)
 
@@ -92,6 +100,7 @@ def upload():
     qr_url = url_for("qr", doc_id=doc_id, _external=True)
 
     return render_template("share.html", doc_id=doc_id, sign_url=sign_url, qr_url=qr_url)
+
 
 @app.get("/qr/<string:doc_id>")
 def qr(doc_id):
@@ -104,49 +113,81 @@ def qr(doc_id):
     bio.seek(0)
     return send_file(bio, mimetype="image/png")
 
+
 @app.get("/render/<path:filename>")
 def render_file(filename):
-    # serwujemy wyrenderowane PNG z /tmp
     return send_from_directory(str(RENDERS_DIR), filename)
+
 
 @app.get("/sign/<string:doc_id>")
 def sign(doc_id):
     doc_id = safe_doc_id(doc_id)
-    pages = render_pdf_pages_to_pngs(doc_id, zoom=1.5)
+    pages = render_pdf_pages_to_pngs(doc_id, zoom=1.6)
     return render_template("sign.html", doc_id=doc_id, pages=pages)
+
+
+def _collect_pages_from_request():
+    """
+    Obsługuje:
+    1) multipart/form-data: page_<index> = PNG blob
+    2) JSON: { pages: [{index, dataURL}] }
+    Zwraca listę (idx:int, png_bytes:bytes)
+    """
+    ctype = (request.content_type or "").lower()
+
+    # 1) Multipart (preferowane na mobile)
+    if "multipart/form-data" in ctype:
+        pages = []
+        for key, storage in request.files.items():
+            if not key.startswith("page_"):
+                continue
+            try:
+                idx = int(key.split("_", 1)[1])
+            except Exception:
+                continue
+            png_bytes = storage.read()
+            if png_bytes:
+                pages.append((idx, png_bytes))
+        return pages
+
+    # 2) JSON fallback
+    payload = request.get_json(silent=True) or {}
+    out = []
+    for item in payload.get("pages", []):
+        try:
+            idx = int(item.get("index", -1))
+        except Exception:
+            continue
+        data_url = item.get("dataURL", "")
+        if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
+            continue
+        try:
+            png_bytes = base64.b64decode(data_url.split(",", 1)[1])
+        except Exception:
+            continue
+        out.append((idx, png_bytes))
+    return out
+
 
 @app.post("/api/sign/<string:doc_id>")
 def api_sign(doc_id):
     doc_id = safe_doc_id(doc_id)
-    payload = request.get_json(silent=True) or {}
-    pages = payload.get("pages", [])
-
     pdf_path = doc_path(doc_id)
     if not pdf_path.exists():
-        abort(404, "PDF not found")
+        return jsonify({"ok": False, "error": "PDF not found"}), 404
 
-    # Merge: overlay PNG (z canvas) na pełny prostokąt strony
+    pages = _collect_pages_from_request()
+    if not pages:
+        return jsonify({"ok": False, "error": "No signature data received"}), 400
+
     out_bytes = BytesIO()
     with fitz.open(pdf_path) as doc:
-        for item in pages:
-            idx = int(item.get("index", -1))
-            data_url = item.get("dataURL", "")
-
+        for idx, png_bytes in pages:
             if idx < 0 or idx >= len(doc):
                 continue
-            if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
-                continue
-
-            b64 = data_url.split(",", 1)[1]
-            try:
-                png_bytes = base64.b64decode(b64)
-            except Exception:
-                continue
-
             page = doc.load_page(idx)
             rect = page.rect
             page.insert_image(rect, stream=png_bytes, keep_proportion=False, overlay=True)
-
         doc.save(out_bytes)
 
     signed_pdf = out_bytes.getvalue()
@@ -155,12 +196,15 @@ def api_sign(doc_id):
     signed_path = SIGNED_DIR / filename
     signed_path.write_bytes(signed_pdf)
 
-    return jsonify({
-        "ok": True,
-        "filename": filename,
-        "success_url": url_for("success", filename=filename),
-        "download_url": url_for("download", filename=filename),
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "filename": filename,
+            "success_url": url_for("success", filename=filename),
+            "download_url": url_for("download", filename=filename),
+        }
+    )
+
 
 @app.get("/success/<path:filename>")
 def success(filename):
@@ -169,6 +213,7 @@ def success(filename):
         filename=filename,
         download_url=url_for("download", filename=filename),
     )
+
 
 @app.get("/download/<path:filename>")
 def download(filename):

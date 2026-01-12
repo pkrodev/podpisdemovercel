@@ -1,4 +1,3 @@
-<!-- templates/sign.html -->
 <!doctype html>
 <html lang="pl">
 <head>
@@ -6,46 +5,87 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Podpis PDF — {{ doc_id }}</title>
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:14px}
-    .topbar{position:sticky;top:0;background:#fff;padding:10px 0;border-bottom:1px solid #eee;z-index:10}
-    button{padding:12px 14px;border-radius:12px;border:1px solid #111;background:#111;color:#fff;font-weight:700}
-    button.secondary{background:#fff;color:#111}
-    .hint{color:#666;margin:8px 0 0}
-    .page{margin:18px 0}
-    .wrap{position:relative;display:inline-block;max-width:100%}
-    img.pdf{display:block;max-width:100%;height:auto;border:1px solid #eee;border-radius:12px}
+    :root { --bg:#0b0f19; --card:#121a2a; --muted:#8aa0c6; --text:#eaf1ff; --btn:#4f8cff; --danger:#ff5c7a; }
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#070a12,#0b0f19);color:var(--text);overscroll-behavior:none}
+    .wrap{max-width:1100px;margin:0 auto;padding:14px 12px 26px}
+    .bar{
+      position:sticky;top:0;z-index:50;
+      background:rgba(11,15,25,.75);
+      backdrop-filter: blur(10px);
+      border-bottom:1px solid rgba(255,255,255,.08);
+      padding:12px 0;
+    }
+    .bar-inner{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .title{font-weight:900}
+    .status{margin-left:auto;color:var(--muted);font-size:14px}
+    button{
+      cursor:pointer;padding:12px 14px;border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.25);color:var(--text);font-weight:900
+    }
+    button.primary{background:var(--btn);color:#07101f}
+    button.danger{background:rgba(255,92,122,.15);border-color:rgba(255,92,122,.35)}
+    .hint{color:var(--muted);font-size:14px;margin-top:8px}
+    .page{
+      margin-top:14px;
+      background:rgba(18,26,42,.9);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:18px;
+      padding:12px;
+      box-shadow:0 12px 40px rgba(0,0,0,.35)
+    }
+    .pagehead{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+    .pagehead .muted{color:var(--muted);font-size:14px}
+    .stage{
+      position:relative;
+      width:100%;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.08);
+      background:#fff;
+      touch-action:none; /* ważne dla pointer events na mobile */
+    }
+    img.pdf{display:block;width:100%;height:auto}
     canvas.sig{
       position:absolute;left:0;top:0;
-      touch-action:none; /* ważne na tablet */
+      width:100%;height:100%;
+      z-index:10;       /* ważne: canvas NAD obrazem */
+      pointer-events:auto;
+      touch-action:none; /* ważne */
     }
-    .pagehead{display:flex;gap:10px;align-items:center;margin:0 0 10px}
-    .status{margin-left:auto;color:#666;font-size:14px}
-    .smallbtn{padding:10px 12px;border-radius:12px;border:1px solid #111;background:#fff;color:#111;font-weight:700}
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button id="submitBtn">Zapisz podpis i generuj PDF</button>
-      <button class="secondary" id="clearAllBtn" type="button">Wyczyść wszystko</button>
-      <span class="status" id="status">Gotowe</span>
+  <div class="bar">
+    <div class="wrap">
+      <div class="bar-inner">
+        <div class="title">Podpis PDF</div>
+        <button class="primary" id="submitBtn">Zapisz i generuj PDF</button>
+        <button class="danger" id="clearAllBtn" type="button">Wyczyść wszystko</button>
+        <div class="status" id="status">Gotowe</div>
+      </div>
+      <div class="hint">
+        Rysuj palcem na dokumencie. Jeśli strona przewija się podczas rysowania — przytrzymaj palec i rysuj na samym dokumencie.
+      </div>
     </div>
-    <div class="hint">Rysuj palcem po dokumencie. Podpis zostanie nałożony na PDF (na każdej stronie osobno).</div>
   </div>
 
-  {% for p in pages %}
-    <div class="page" data-idx="{{ p.idx }}">
-      <div class="pagehead">
-        <strong>Strona {{ p.idx + 1 }}</strong>
-        <button class="smallbtn clearBtn" type="button">Wyczyść stronę</button>
-      </div>
+  <div class="wrap">
+    {% for p in pages %}
+      <div class="page" data-idx="{{ p.idx }}">
+        <div class="pagehead">
+          <strong>Strona {{ p.idx + 1 }}</strong>
+          <span class="muted">Podpisz w dowolnym miejscu</span>
+          <button class="danger clearBtn" type="button" style="margin-left:auto">Wyczyść stronę</button>
+        </div>
 
-      <div class="wrap">
-        <img class="pdf" id="img-{{ p.idx }}" src="/render/{{ p.name }}" alt="page {{ p.idx+1 }}">
-        <canvas class="sig" id="c-{{ p.idx }}"></canvas>
+        <div class="stage" id="stage-{{ p.idx }}">
+          <img class="pdf" id="img-{{ p.idx }}" src="/render/{{ p.name }}" alt="page {{ p.idx+1 }}">
+          <canvas class="sig" id="c-{{ p.idx }}"></canvas>
+        </div>
       </div>
-    </div>
-  {% endfor %}
+    {% endfor %}
+  </div>
 
 <script>
 (() => {
@@ -56,122 +96,206 @@
 
   const canvases = [];
   const ctxs = [];
-  const dirty = []; // czy było rysowane na stronie
+  const dirty = [];
 
-  function setStatus(txt) { statusEl.textContent = txt; }
+  const DPR = () => (window.devicePixelRatio || 1);
 
-  function setupOne(idx) {
-    const img = document.getElementById(`img-${idx}`);
+  function setStatus(t) { statusEl.textContent = t; }
+
+  function resizeCanvasToStage(idx) {
+    const stage = document.getElementById(`stage-${idx}`);
     const canvas = document.getElementById(`c-${idx}`);
+    const img = document.getElementById(`img-${idx}`);
+
+    const rect = stage.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const ratio = DPR();
+    canvas.width = Math.round(rect.width * ratio);
+    canvas.height = Math.round(rect.height * ratio);
+
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0); // rysujemy w CSS px
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#000";
+
+    ctxs[idx] = ctx;
+  }
+
+  function makeDrawer(idx) {
+    const canvas = document.getElementById(`c-${idx}`);
+    const stage = document.getElementById(`stage-${idx}`);
     const pageEl = document.querySelector(`.page[data-idx="${idx}"]`);
     const clearBtn = pageEl.querySelector(".clearBtn");
 
+    canvases[idx] = canvas;
     dirty[idx] = false;
 
-    function resize() {
-      // dopasuj canvas do rozmiaru wyświetlanego obrazka (CSS px)
-      const rect = img.getBoundingClientRect();
-      const ratio = window.devicePixelRatio || 1;
+    // ResizeObserver = bardziej niezawodne na mobile (zmiana orientacji, pasek URL itd.)
+    const ro = new ResizeObserver(() => resizeCanvasToStage(idx));
+    ro.observe(stage);
 
-      canvas.style.width = rect.width + "px";
-      canvas.style.height = rect.height + "px";
-      canvas.width = Math.round(rect.width * ratio);
-      canvas.height = Math.round(rect.height * ratio);
+    // startowe dopasowanie po załadowaniu obrazka
+    const img = document.getElementById(`img-${idx}`);
+    if (img.complete) resizeCanvasToStage(idx);
+    else img.addEventListener("load", () => resizeCanvasToStage(idx));
 
-      const ctx = canvas.getContext("2d");
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0); // rysujemy w CSS px
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.strokeStyle = "#000";
-      ctxs[idx] = ctx;
-    }
+    const ctx = () => ctxs[idx];
 
-    function pos(e) {
+    function pointFromClient(clientX, clientY) {
       const r = canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
+      return { x: clientX - r.left, y: clientY - r.top };
     }
 
     let drawing = false;
     let last = null;
 
-    canvas.addEventListener("pointerdown", (e) => {
-      drawing = true;
-      canvas.setPointerCapture(e.pointerId);
-      last = pos(e);
-    });
-
-    canvas.addEventListener("pointermove", (e) => {
-      if (!drawing) return;
-      const p = pos(e);
-      const ctx = ctxs[idx];
-      ctx.beginPath();
-      ctx.moveTo(last.x, last.y);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
+    function drawLine(p) {
+      const c = ctx();
+      if (!c || !last) return;
+      c.beginPath();
+      c.moveTo(last.x, last.y);
+      c.lineTo(p.x, p.y);
+      c.stroke();
       last = p;
       dirty[idx] = true;
-    });
+    }
 
-    canvas.addEventListener("pointerup", () => { drawing = false; last = null; });
-    canvas.addEventListener("pointercancel", () => { drawing = false; last = null; });
+    // Prefer Pointer Events, ale dodajemy fallback Touch (iOS/Safari bywa kapryśne)
+    const hasPointer = "PointerEvent" in window;
+
+    if (hasPointer) {
+      canvas.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        drawing = true;
+        canvas.setPointerCapture?.(e.pointerId);
+        last = pointFromClient(e.clientX, e.clientY);
+      });
+
+      canvas.addEventListener("pointermove", (e) => {
+        if (!drawing) return;
+        e.preventDefault();
+        drawLine(pointFromClient(e.clientX, e.clientY));
+      });
+
+      const end = (e) => {
+        e?.preventDefault?.();
+        drawing = false;
+        last = null;
+      };
+
+      canvas.addEventListener("pointerup", end);
+      canvas.addEventListener("pointercancel", end);
+      canvas.addEventListener("pointerleave", end);
+    } else {
+      // Touch fallback
+      canvas.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const t = e.touches[0];
+        drawing = true;
+        last = pointFromClient(t.clientX, t.clientY);
+      }, { passive: false });
+
+      canvas.addEventListener("touchmove", (e) => {
+        if (!drawing) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        drawLine(pointFromClient(t.clientX, t.clientY));
+      }, { passive: false });
+
+      canvas.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        drawing = false;
+        last = null;
+      }, { passive: false });
+
+      // Mouse fallback
+      canvas.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        drawing = true;
+        last = pointFromClient(e.clientX, e.clientY);
+      });
+      window.addEventListener("mousemove", (e) => {
+        if (!drawing) return;
+        drawLine(pointFromClient(e.clientX, e.clientY));
+      });
+      window.addEventListener("mouseup", () => {
+        drawing = false;
+        last = null;
+      });
+    }
 
     clearBtn.addEventListener("click", () => {
-      const ctx = ctxs[idx];
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const c = ctx();
+      if (!c) return;
+      c.clearRect(0, 0, canvas.width, canvas.height);
       dirty[idx] = false;
     });
-
-    // init po załadowaniu obrazka
-    if (img.complete) resize();
-    else img.addEventListener("load", resize);
-
-    window.addEventListener("resize", resize);
-
-    canvases[idx] = canvas;
   }
 
-  // setup dla każdej strony
   document.querySelectorAll(".page").forEach(el => {
     const idx = parseInt(el.getAttribute("data-idx"), 10);
-    setupOne(idx);
+    makeDrawer(idx);
   });
 
   clearAllBtn.addEventListener("click", () => {
-    canvases.forEach((c, i) => {
-      if (!c) return;
-      const ctx = ctxs[i];
-      ctx.clearRect(0, 0, c.width, c.height);
+    canvases.forEach((canvas, i) => {
+      if (!canvas) return;
+      const c = ctxs[i];
+      c?.clearRect(0, 0, canvas.width, canvas.height);
       dirty[i] = false;
     });
+    setStatus("Wyczyszczono");
   });
+
+  async function canvasToBlob(canvas) {
+    return await new Promise((resolve) => {
+      if (canvas.toBlob) {
+        canvas.toBlob((b) => resolve(b), "image/png");
+      } else {
+        // fallback (stare przeglądarki)
+        const dataURL = canvas.toDataURL("image/png");
+        const b64 = dataURL.split(",")[1];
+        const bin = atob(b64);
+        const len = bin.length;
+        const arr = new Uint8Array(len);
+        for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+        resolve(new Blob([arr], { type: "image/png" }));
+      }
+    });
+  }
 
   submitBtn.addEventListener("click", async () => {
     submitBtn.disabled = true;
-    setStatus("Wysyłanie…");
+    setStatus("Przygotowanie…");
 
     try {
-      // wysyłamy tylko strony, na których coś narysowano
-      const pages = [];
-      canvases.forEach((c, i) => {
-        if (!c) return;
-        if (!dirty[i]) return;
+      const fd = new FormData();
+      let count = 0;
 
-        // UWAGA: toDataURL w rozdzielczości aktualnego canvas (DPR)
-        pages.push({ index: i, dataURL: c.toDataURL("image/png") });
-      });
+      for (let i = 0; i < canvases.length; i++) {
+        const canvas = canvases[i];
+        if (!canvas || !dirty[i]) continue;
 
-      if (pages.length === 0) {
-        setStatus("Brak podpisu — narysuj coś i spróbuj ponownie.");
+        const blob = await canvasToBlob(canvas);
+        if (!blob || !blob.size) continue;
+
+        fd.append(`page_${i}`, blob, `page_${i}.png`);
+        count++;
+      }
+
+      if (count === 0) {
+        setStatus("Brak podpisu — narysuj coś na dokumencie.");
         submitBtn.disabled = false;
         return;
       }
 
-      setStatus("Generowanie PDF…");
+      setStatus("Wysyłanie…");
       const res = await fetch(`/api/sign/${docId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pages })
+        body: fd
       });
 
       if (!res.ok) {
@@ -180,7 +304,9 @@
       }
 
       const data = await res.json();
-      setStatus("Gotowe. Przekierowanie…");
+      if (!data.ok) throw new Error(data.error || "Błąd");
+
+      setStatus("Gotowe ✅");
       window.location.href = data.success_url;
     } catch (err) {
       console.error(err);

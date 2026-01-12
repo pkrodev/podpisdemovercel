@@ -1,37 +1,77 @@
-<!-- templates/share.html -->
 <!doctype html>
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Podpis PDF — Link</title>
+  <title>Otwórz na tablecie</title>
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px;max-width:820px}
-    .card{border:1px solid #ddd;border-radius:14px;padding:18px}
-    .row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
-    code{background:#f6f6f6;padding:2px 6px;border-radius:8px}
-    a.btn{display:inline-block;margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid #111;background:#111;color:#fff;text-decoration:none;font-weight:600}
-    img{border:1px solid #eee;border-radius:12px}
+    :root { --bg:#0b0f19; --card:#121a2a; --muted:#8aa0c6; --text:#eaf1ff; --btn:#4f8cff; }
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#070a12,#0b0f19);color:var(--text)}
+    .wrap{max-width:920px;margin:0 auto;padding:28px 16px}
+    .card{background:rgba(18,26,42,.9);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:18px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+    @media(max-width:860px){ .grid{grid-template-columns:1fr} }
+    a{color:#bcd5ff}
+    code{display:inline-block;background:rgba(0,0,0,.25);padding:3px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.08)}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button,a.btn{cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.25);color:var(--text);font-weight:800;text-decoration:none}
+    a.btn.primary{background:var(--btn);color:#07101f}
+    img{width:100%;max-width:320px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:#fff}
+    .muted{color:var(--muted);font-size:14px}
+    h1{margin:0 0 12px}
   </style>
 </head>
 <body>
-  <h1>Otwórz na tablecie</h1>
+  <div class="wrap">
+    <h1>Otwórz na tablecie</h1>
 
-  <div class="card">
-    <div class="row">
+    <div class="card grid">
       <div>
-        <p><strong>doc_id:</strong> <code>{{ doc_id }}</code></p>
-        <p><strong>Link do podpisu:</strong><br/>
-          <a href="{{ sign_url }}">{{ sign_url }}</a>
+        <div class="muted">doc_id: <code>{{ doc_id }}</code></div>
+        <p style="margin:10px 0 6px"><strong>Link do podpisu:</strong></p>
+        <div><a id="signLink" href="{{ sign_url }}">{{ sign_url }}</a></div>
+
+        <div class="btns">
+          <a class="btn primary" href="{{ sign_url }}">Otwórz podpis</a>
+          <button id="copyBtn" type="button">Kopiuj link</button>
+          <button id="shareBtn" type="button">Udostępnij</button>
+        </div>
+
+        <p class="muted" style="margin-top:12px">
+          Jeśli tablet i komputer są w tej samej sieci, najwygodniej zeskanować QR.
         </p>
-        <a class="btn" href="{{ sign_url }}">Otwórz stronę podpisu</a>
       </div>
 
-      <div>
-        <p><strong>QR:</strong></p>
-        <img src="{{ qr_url }}" alt="QR" width="220" height="220"/>
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+        <div class="muted"><strong>QR:</strong></div>
+        <img src="{{ qr_url }}" alt="QR do podpisu">
       </div>
     </div>
   </div>
+
+<script>
+(() => {
+  const link = document.getElementById('signLink').href;
+
+  document.getElementById('copyBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      alert('Skopiowano link ✅');
+    } catch {
+      prompt('Skopiuj ręcznie:', link);
+    }
+  });
+
+  document.getElementById('shareBtn').addEventListener('click', async () => {
+    if (!navigator.share) {
+      alert('Twoja przeglądarka nie wspiera Share API.');
+      return;
+    }
+    try {
+      await navigator.share({ title: 'Podpis PDF', text: 'Otwórz link do podpisu:', url: link });
+    } catch {}
+  });
+})();
+</script>
 </body>
 </html>
