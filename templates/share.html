@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Otwórz na tablecie</title>
+  <title>Podpis dokumentu</title>
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;color:#111}
     .wrap{max-width:920px;margin:0 auto;padding:28px 16px}
@@ -22,28 +22,26 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Otwórz na tablecie</h1>
+    <h1>Podpis dokumentu</h1>
 
     <div class="card grid">
       <div>
-        <div class="muted">doc_id: <code>{{ doc_id }}</code></div>
+        <div class="muted">Identyfikator: <code>{{ doc_id }}</code></div>
 
         <p style="margin:12px 0 6px"><strong>Link do podpisu:</strong></p>
         <div><a id="signLink" href="{{ sign_url }}">{{ sign_url }}</a></div>
 
         <div class="btns">
-          <a class="btn primary" href="{{ sign_url }}">Otwórz podpis</a>
+          <a class="btn primary" href="{{ sign_url }}">Przejdź do podpisu</a>
           <button id="copyBtn" type="button">Kopiuj link</button>
           <button id="shareBtn" type="button">Udostępnij</button>
         </div>
 
-        <p class="muted" style="margin-top:12px">
-          Najwygodniej: zeskanuj QR na tablecie.
-        </p>
+        <p class="muted" style="margin-top:12px">Możesz też zeskanować kod QR.</p>
       </div>
 
       <div>
-        <div class="muted" style="margin-bottom:8px"><strong>QR:</strong></div>
+        <div class="muted" style="margin-bottom:8px"><strong>Kod QR:</strong></div>
         <img src="{{ qr_url }}" alt="QR do podpisu">
       </div>
     </div>
@@ -63,8 +61,8 @@
   });
 
   document.getElementById('shareBtn').addEventListener('click', async () => {
-    if (!navigator.share) return alert('Brak Share API w tej przeglądarce.');
-    try { await navigator.share({ title:'Podpis PDF', url: link }); } catch {}
+    if (!navigator.share) return alert('Udostępnianie nie jest dostępne w tej przeglądarce.');
+    try { await navigator.share({ title:'Podpis dokumentu', url: link }); } catch {}
   });
 })();
 </script>

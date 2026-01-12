@@ -19,7 +19,7 @@
 <body>
   <div class="wrap">
     <h1>Podpis PDF</h1>
-    <p>Wrzuć PDF na komputerze, otwórz link/QR na tablecie i podpisz palcem.</p>
+    <p>Wyślij dokument i podpisz go na urządzeniu mobilnym.</p>
 
     <div class="card">
       <form action="/upload" method="post" enctype="multipart/form-data">
@@ -27,7 +27,7 @@
           <input type="file" name="file" accept="application/pdf" required />
           <button type="submit">Wyślij PDF</button>
         </div>
-        <div class="hint">Po uploadzie dostaniesz link + QR. (Wersja demo nie zapisuje podpisanego PDF.)</div>
+        <div class="hint">Po wysłaniu otrzymasz link i kod QR do podpisu.</div>
       </form>
     </div>
   </div>

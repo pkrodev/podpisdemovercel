@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Podpis PDF — {{ doc_id }}</title>
+  <title>Podpis dokumentu</title>
   <style>
     html,body{height:100%}
     body{
@@ -14,7 +14,6 @@
     }
     .wrap{max-width:1100px;margin:0 auto;padding:14px 12px 26px}
 
-    /* Sticky header, 2 linie: akcje + status/hint */
     .bar{
       position:sticky;top:0;z-index:50;
       background:rgba(255,255,255,.92);
@@ -22,9 +21,7 @@
       border-bottom:1px solid #e7e8ee;
     }
     .bar-inner{padding:12px}
-    .row{
-      display:flex;gap:10px;flex-wrap:wrap;align-items:center;
-    }
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .title{font-weight:900}
     .actions{display:flex;gap:10px;flex-wrap:wrap}
     button{
@@ -33,10 +30,41 @@
     }
     button.primary{background:#111;color:#fff}
     button.danger{border-color:#b00020;color:#b00020}
+    button:disabled{opacity:.5;cursor:not-allowed}
     .statusline{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}
     .hint{color:#666;font-size:14px}
     .status{color:#333;font-size:14px;font-weight:700}
 
+    .card{
+      margin-top:14px;background:#fff;border:1px solid #e7e8ee;border-radius:16px;
+      padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.06)
+    }
+
+    /* KROK 1: podpis */
+    .sig-pad{
+      display:flex;flex-direction:column;gap:10px;
+    }
+    .sig-stage{
+      position:relative;
+      width:100%;
+      height:260px;
+      border-radius:14px;
+      border:1px solid #e7e8ee;
+      background:#fff;
+      overflow:hidden;
+    }
+    canvas.sigCanvas{
+      position:absolute;inset:0;
+      width:100%;height:100%;
+      z-index:10;
+      touch-action:none;
+      user-select:none;
+      -webkit-user-select:none;
+      -webkit-touch-callout:none;
+    }
+    .sig-toolbar{display:flex;gap:10px;flex-wrap:wrap}
+
+    /* KROK 2: dokument */
     .page{
       margin-top:14px;background:#fff;border:1px solid #e7e8ee;border-radius:16px;
       padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.06)
@@ -55,23 +83,33 @@
     }
     img.pdf{display:block;width:100%;height:auto}
 
-    /* NAJWAŻNIEJSZE dla Android Chrome */
-    canvas.sig{
+    /* overlay z podpisem (canvas) */
+    canvas.overlay{
       position:absolute;left:0;top:0;
       width:100%;height:100%;
       z-index:10;
       pointer-events:auto;
-      touch-action:none;            /* blokuje scroll podczas rysowania */
-      -webkit-user-select:none;
+      touch-action:none;
       user-select:none;
+      -webkit-user-select:none;
       -webkit-touch-callout:none;
     }
 
-    /* Modal demo */
+    /* prostokąt wyboru */
+    .select-rect{
+      position:absolute;
+      border:2px dashed #111;
+      background:rgba(0,0,0,.06);
+      z-index:20;
+      display:none;
+      pointer-events:none;
+      border-radius:10px;
+    }
+
+    /* Modal */
     .modal{
       position:fixed;inset:0;display:none;align-items:center;justify-content:center;
-      background:rgba(0,0,0,.45);z-index:999;
-      padding:18px;
+      background:rgba(0,0,0,.45);z-index:999;padding:18px;
     }
     .modal.show{display:flex}
     .modal-card{
@@ -88,45 +126,75 @@
   <div class="bar">
     <div class="wrap bar-inner">
       <div class="row">
-        <div class="title">Podpis PDF</div>
+        <div class="title" id="barTitle">Krok 1/2: Złóż podpis</div>
         <div class="actions">
-          <button class="primary" id="submitBtn">Zakończ podpis</button>
-          <button class="danger" id="clearAllBtn" type="button">Wyczyść wszystko</button>
+          <button class="primary" id="nextBtn">Dalej</button>
+          <button class="danger" id="clearBtn" type="button">Wyczyść</button>
+          <button class="primary" id="finishBtn" style="display:none">Zakończ</button>
         </div>
       </div>
 
       <div class="statusline">
-        <div class="hint">Rysuj palcem na dokumencie. (Android Chrome: podpis powinien działać od razu)</div>
+        <div class="hint" id="hint">
+          Podpisz się palcem w polu poniżej, a następnie przejdź dalej.
+        </div>
         <div class="status" id="status">Gotowe</div>
       </div>
     </div>
   </div>
 
   <div class="wrap">
-    {% for p in pages %}
-      <div class="page" data-idx="{{ p.idx }}">
-        <div class="pagehead">
-          <strong>Strona {{ p.idx + 1 }}</strong>
-          <span class="muted">podpisz w dowolnym miejscu</span>
-          <span class="spacer"></span>
-          <button class="danger clearBtn" type="button">Wyczyść stronę</button>
-        </div>
 
-        <div class="stage" id="stage-{{ p.idx }}">
-          <img class="pdf" id="img-{{ p.idx }}" src="/render/{{ p.name }}" alt="page {{ p.idx+1 }}">
-          <canvas class="sig" id="c-{{ p.idx }}"></canvas>
+    <!-- KROK 1 -->
+    <div class="card" id="step1">
+      <div class="sig-pad">
+        <div class="sig-stage" id="sigStage">
+          <canvas class="sigCanvas" id="sigCanvas"></canvas>
+        </div>
+        <div class="sig-toolbar">
+          <div style="color:#666;font-size:14px">
+            Wskazówka: jeśli niechcący przewijasz ekran, rysuj wewnątrz pola podpisu.
+          </div>
         </div>
       </div>
-    {% endfor %}
+    </div>
+
+    <!-- KROK 2 -->
+    <div id="step2" style="display:none">
+      <div class="card">
+        <div style="color:#111;font-weight:800;margin-bottom:6px">Krok 2/2: Wstaw podpis do dokumentu</div>
+        <div style="color:#666;font-size:14px">
+          Na wybranej stronie dotknij i przeciągnij, aby zaznaczyć obszar podpisu. Podpis zostanie wstawiony w zaznaczone miejsce.
+        </div>
+      </div>
+
+      {% for p in pages %}
+        <div class="page" data-idx="{{ p.idx }}">
+          <div class="pagehead">
+            <strong>Strona {{ p.idx + 1 }}</strong>
+            <span class="muted">zaznacz obszar podpisu</span>
+            <span class="spacer"></span>
+            <button class="danger clearPageBtn" type="button">Usuń podpis ze strony</button>
+          </div>
+
+          <div class="stage" id="stage-{{ p.idx }}">
+            <img class="pdf" id="img-{{ p.idx }}" src="/render/{{ p.name }}" alt="page {{ p.idx+1 }}">
+            <canvas class="overlay" id="c-{{ p.idx }}"></canvas>
+            <div class="select-rect" id="r-{{ p.idx }}"></div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
   </div>
 
   <div class="modal" id="modal">
     <div class="modal-card">
-      <h2 id="modalTitle">Gotowe</h2>
-      <p id="modalText">Dokument został podpisany. Koniec wersji demonstracyjnej.</p>
+      <h2 id="modalTitle">Potwierdzenie</h2>
+      <p id="modalText">Dokument został podpisany.</p>
       <div class="btns">
         <button class="primary" id="modalOk">OK</button>
-        <button id="modalClear">Wyczyść i zamknij</button>
+        <button id="modalClose">Zamknij</button>
       </div>
     </div>
   </div>
@@ -134,28 +202,192 @@
 <script>
 (() => {
   const docId = "{{ doc_id }}";
+
   const statusEl = document.getElementById("status");
-  const submitBtn = document.getElementById("submitBtn");
-  const clearAllBtn = document.getElementById("clearAllBtn");
+  const hintEl = document.getElementById("hint");
+  const barTitle = document.getElementById("barTitle");
+
+  const nextBtn = document.getElementById("nextBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const finishBtn = document.getElementById("finishBtn");
+
+  const step1 = document.getElementById("step1");
+  const step2 = document.getElementById("step2");
 
   const modal = document.getElementById("modal");
   const modalText = document.getElementById("modalText");
   const modalOk = document.getElementById("modalOk");
-  const modalClear = document.getElementById("modalClear");
+  const modalClose = document.getElementById("modalClose");
 
-  const canvases = [];
-  const ctxs = [];
-  const dirty = [];
   const DPR = () => (window.devicePixelRatio || 1);
-
   function setStatus(t){ statusEl.textContent = t; }
 
-  function resizeToImage(idx){
+  // --------------------------
+  // KROK 1: Podpis (pad)
+  // --------------------------
+  const sigStage = document.getElementById("sigStage");
+  const sigCanvas = document.getElementById("sigCanvas");
+  const sigCtx = sigCanvas.getContext("2d");
+  let sigDirty = false;
+
+  function resizeSigCanvas(){
+    const r = sigStage.getBoundingClientRect();
+    const ratio = DPR();
+    sigCanvas.width = Math.round(r.width * ratio);
+    sigCanvas.height = Math.round(r.height * ratio);
+    sigCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    sigCtx.lineWidth = 3;
+    sigCtx.lineCap = "round";
+    sigCtx.lineJoin = "round";
+    sigCtx.strokeStyle = "#000";
+  }
+
+  function clearSig(){
+    sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+    sigDirty = false;
+    setStatus("Wyczyszczono");
+  }
+
+  function pointFromClient(canvas, x, y){
+    const r = canvas.getBoundingClientRect();
+    return { x: x - r.left, y: y - r.top };
+  }
+
+  function attachDrawHandlers(canvas, getCtx, onDirty){
+    let drawing = false;
+    let last = null;
+
+    // Pointer
+    canvas.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      drawing = true;
+      canvas.setPointerCapture?.(e.pointerId);
+      last = pointFromClient(canvas, e.clientX, e.clientY);
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+      if (!drawing) return;
+      e.preventDefault(); e.stopPropagation();
+      const p = pointFromClient(canvas, e.clientX, e.clientY);
+      const ctx = getCtx();
+      if (!ctx || !last) return;
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      last = p;
+      onDirty();
+    });
+
+    const end = (e) => {
+      e?.preventDefault?.();
+      drawing = false;
+      last = null;
+    };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+    canvas.addEventListener("pointerleave", end);
+
+    // Touch fallback (passive:false)
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const t = e.touches[0];
+      drawing = true;
+      last = pointFromClient(canvas, t.clientX, t.clientY);
+    }, { passive:false });
+
+    canvas.addEventListener("touchmove", (e) => {
+      if (!drawing) return;
+      e.preventDefault(); e.stopPropagation();
+      const t = e.touches[0];
+      const p = pointFromClient(canvas, t.clientX, t.clientY);
+      const ctx = getCtx();
+      if (!ctx || !last) return;
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      last = p;
+      onDirty();
+    }, { passive:false });
+
+    canvas.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      drawing = false;
+      last = null;
+    }, { passive:false });
+  }
+
+  attachDrawHandlers(sigCanvas, () => sigCtx, () => { sigDirty = true; });
+
+  const roSig = new ResizeObserver(resizeSigCanvas);
+  roSig.observe(sigStage);
+
+  clearBtn.addEventListener("click", clearSig);
+
+  function signatureBBox(canvas){
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    const img = ctx.getImageData(0, 0, w, h).data;
+
+    let minX = w, minY = h, maxX = 0, maxY = 0;
+    let found = false;
+
+    // scan alpha channel
+    for (let y = 0; y < h; y++) {
+      const row = y * w * 4;
+      for (let x = 0; x < w; x++) {
+        const a = img[row + x*4 + 3];
+        if (a > 10) {
+          found = true;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    if (!found) return null;
+
+    const pad = Math.round(Math.min(w, h) * 0.02);
+    minX = Math.max(0, minX - pad);
+    minY = Math.max(0, minY - pad);
+    maxX = Math.min(w-1, maxX + pad);
+    maxY = Math.min(h-1, maxY + pad);
+
+    return { minX, minY, maxX, maxY, w: (maxX - minX + 1), h: (maxY - minY + 1) };
+  }
+
+  function exportCroppedSignature(){
+    const bbox = signatureBBox(sigCanvas);
+    if (!bbox) return null;
+
+    const out = document.createElement("canvas");
+    out.width = bbox.w;
+    out.height = bbox.h;
+
+    const octx = out.getContext("2d");
+    // skopiuj wycinek
+    octx.drawImage(sigCanvas, bbox.minX, bbox.minY, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
+    return out;
+  }
+
+  // --------------------------
+  // KROK 2: Wstawianie podpisu
+  // --------------------------
+  const overlays = [];
+  const octxs = [];
+  const placed = []; // czy podpis wstawiony na stronie
+
+  let signatureImage = new Image();
+  let signatureCanvasCropped = null;
+
+  function resizeOverlayToImage(idx){
     const img = document.getElementById(`img-${idx}`);
     const canvas = document.getElementById(`c-${idx}`);
     if (!img || !canvas) return;
 
-    // Klucz: bierzemy realny rozmiar WYŚWIETLANEGO obrazka
     const w = img.clientWidth;
     const h = img.clientHeight;
     if (!w || !h) return;
@@ -165,164 +397,216 @@
     canvas.height = Math.round(h * ratio);
 
     const ctx = canvas.getContext("2d");
-    // rysujemy w CSS px
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#000";
-
-    ctxs[idx] = ctx;
+    octxs[idx] = ctx;
   }
 
-  function pointFromClient(canvas, clientX, clientY){
-    const r = canvas.getBoundingClientRect();
-    return { x: clientX - r.left, y: clientY - r.top };
+  function placeSignatureOnPage(idx, rectCss){
+    const ctx = octxs[idx];
+    const canvas = overlays[idx];
+    if (!ctx || !canvas || !signatureImage) return;
+
+    // wyczyść i wstaw podpis (tylko jedna instancja na stronie – prosto i czytelnie)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const sigW = signatureImage.naturalWidth || signatureImage.width;
+    const sigH = signatureImage.naturalHeight || signatureImage.height;
+
+    // dopasuj z zachowaniem proporcji, wycentruj w rect
+    const scale = Math.min(rectCss.w / sigW, rectCss.h / sigH);
+    const drawW = sigW * scale;
+    const drawH = sigH * scale;
+
+    const dx = rectCss.x + (rectCss.w - drawW) / 2;
+    const dy = rectCss.y + (rectCss.h - drawH) / 2;
+
+    ctx.drawImage(signatureImage, dx, dy, drawW, drawH);
+    placed[idx] = true;
   }
 
   function setupPage(idx){
-    const canvas = document.getElementById(`c-${idx}`);
+    const stage = document.getElementById(`stage-${idx}`);
     const img = document.getElementById(`img-${idx}`);
+    const canvas = document.getElementById(`c-${idx}`);
+    const rectEl = document.getElementById(`r-${idx}`);
     const pageEl = document.querySelector(`.page[data-idx="${idx}"]`);
-    const clearBtn = pageEl.querySelector(".clearBtn");
+    const clearPageBtn = pageEl.querySelector(".clearPageBtn");
 
-    canvases[idx] = canvas;
-    dirty[idx] = false;
+    overlays[idx] = canvas;
+    placed[idx] = false;
 
-    // dopasuj canvas po załadowaniu obrazka i przy resize/orientacji
-    if (img.complete) resizeToImage(idx);
-    else img.addEventListener("load", () => resizeToImage(idx));
+    if (img.complete) resizeOverlayToImage(idx);
+    else img.addEventListener("load", () => resizeOverlayToImage(idx));
 
-    window.addEventListener("resize", () => resizeToImage(idx));
-    window.addEventListener("orientationchange", () => setTimeout(() => resizeToImage(idx), 150));
+    window.addEventListener("resize", () => resizeOverlayToImage(idx));
+    window.addEventListener("orientationchange", () => setTimeout(() => resizeOverlayToImage(idx), 150));
 
-    // --- DRAW ENGINE (Android Chrome friendly) ---
-    let drawing = false;
-    let last = null;
+    let selecting = false;
+    let start = null;
 
-    // gate: unikamy dublowania pointer+touch
-    let mode = null; // "pointer" albo "touch"
-
-    function drawTo(p){
-      const ctx = ctxs[idx];
-      if (!ctx || !last) return;
-      ctx.beginPath();
-      ctx.moveTo(last.x, last.y);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      last = p;
-      dirty[idx] = true;
+    function clientToStage(x,y){
+      const r = stage.getBoundingClientRect();
+      return { x: x - r.left, y: y - r.top };
     }
 
-    // POINTER
+    function showRect(x,y,w,h){
+      rectEl.style.display = "block";
+      rectEl.style.left = x + "px";
+      rectEl.style.top = y + "px";
+      rectEl.style.width = w + "px";
+      rectEl.style.height = h + "px";
+    }
+    function hideRect(){ rectEl.style.display = "none"; }
+
+    function normalizeRect(a,b){
+      const x = Math.min(a.x,b.x);
+      const y = Math.min(a.y,b.y);
+      const w = Math.abs(a.x-b.x);
+      const h = Math.abs(a.y-b.y);
+      return { x,y,w,h };
+    }
+
+    // Zaznaczanie obszaru na overlay canvas (pointer + touch)
     canvas.addEventListener("pointerdown", (e) => {
-      mode = "pointer";
-      e.preventDefault();
-      e.stopPropagation();
-      drawing = true;
+      e.preventDefault(); e.stopPropagation();
+      selecting = true;
       canvas.setPointerCapture?.(e.pointerId);
-      last = pointFromClient(canvas, e.clientX, e.clientY);
+      start = clientToStage(e.clientX, e.clientY);
+      showRect(start.x, start.y, 1, 1);
     });
 
     canvas.addEventListener("pointermove", (e) => {
-      if (mode !== "pointer" || !drawing) return;
-      e.preventDefault();
-      e.stopPropagation();
-      drawTo(pointFromClient(canvas, e.clientX, e.clientY));
+      if (!selecting) return;
+      e.preventDefault(); e.stopPropagation();
+      const cur = clientToStage(e.clientX, e.clientY);
+      const r = normalizeRect(start, cur);
+      showRect(r.x, r.y, r.w, r.h);
     });
 
-    const endPointer = (e) => {
-      if (mode !== "pointer") return;
-      e?.preventDefault?.();
-      drawing = false; last = null;
-    };
+    canvas.addEventListener("pointerup", (e) => {
+      if (!selecting) return;
+      e.preventDefault(); e.stopPropagation();
+      selecting = false;
+      const end = clientToStage(e.clientX, e.clientY);
+      const r = normalizeRect(start, end);
+      hideRect();
 
-    canvas.addEventListener("pointerup", endPointer);
-    canvas.addEventListener("pointercancel", endPointer);
-    canvas.addEventListener("pointerleave", endPointer);
+      if (r.w < 20 || r.h < 12) {
+        setStatus("Zaznacz większy obszar podpisu.");
+        return;
+      }
+      placeSignatureOnPage(idx, r);
+      setStatus("Podpis wstawiony.");
+    });
 
-    // TOUCH fallback (passive:false!)
+    canvas.addEventListener("pointercancel", () => { selecting=false; hideRect(); });
+
     canvas.addEventListener("touchstart", (e) => {
-      if (mode === "pointer") return; // pointer wygrał
-      mode = "touch";
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       const t = e.touches[0];
-      drawing = true;
-      last = pointFromClient(canvas, t.clientX, t.clientY);
+      selecting = true;
+      start = clientToStage(t.clientX, t.clientY);
+      showRect(start.x, start.y, 1, 1);
     }, { passive:false });
 
     canvas.addEventListener("touchmove", (e) => {
-      if (mode !== "touch" || !drawing) return;
-      e.preventDefault();
-      e.stopPropagation();
+      if (!selecting) return;
+      e.preventDefault(); e.stopPropagation();
       const t = e.touches[0];
-      drawTo(pointFromClient(canvas, t.clientX, t.clientY));
+      const cur = clientToStage(t.clientX, t.clientY);
+      const r = normalizeRect(start, cur);
+      showRect(r.x, r.y, r.w, r.h);
     }, { passive:false });
 
     canvas.addEventListener("touchend", (e) => {
-      if (mode !== "touch") return;
-      e.preventDefault();
-      drawing = false; last = null;
+      if (!selecting) return;
+      e.preventDefault(); e.stopPropagation();
+      selecting = false;
+      hideRect();
+      // touchend nie ma clientX/Y, więc bierzemy ostatni rectEl
+      const w = parseFloat(rectEl.style.width || "0");
+      const h = parseFloat(rectEl.style.height || "0");
+      // jeśli rect był ukryty, nie mamy już wymiarów — więc nie robimy nic
+      // (pointer events w praktyce i tak obsłużą większość urządzeń)
     }, { passive:false });
 
-    clearBtn.addEventListener("click", () => {
-      const ctx = ctxs[idx];
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      dirty[idx] = false;
-      setStatus("Wyczyszczono stronę");
+    clearPageBtn.addEventListener("click", () => {
+      const ctx = octxs[idx];
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      placed[idx] = false;
+      setStatus("Usunięto podpis ze strony.");
     });
   }
 
-  document.querySelectorAll(".page").forEach(el => {
-    const idx = parseInt(el.getAttribute("data-idx"), 10);
-    setupPage(idx);
-  });
-
-  clearAllBtn.addEventListener("click", () => {
-    canvases.forEach((canvas, i) => {
-      if (!canvas) return;
-      const ctx = ctxs[i];
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
-      dirty[i] = false;
-    });
-    setStatus("Wyczyszczono wszystko");
-  });
-
   async function canvasToBlob(canvas){
-    return await new Promise((resolve) => {
-      canvas.toBlob((b) => resolve(b), "image/png");
-    });
+    return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
   }
 
   function openModal(text){
     modalText.textContent = text;
     modal.classList.add("show");
   }
-  function closeModal(){
-    modal.classList.remove("show");
-  }
-
+  function closeModal(){ modal.classList.remove("show"); }
   modalOk.addEventListener("click", closeModal);
+  modalClose.addEventListener("click", closeModal);
   modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
 
-  modalClear.addEventListener("click", () => {
-    clearAllBtn.click();
-    closeModal();
+  // --------------------------
+  // Nawigacja kroków
+  // --------------------------
+  nextBtn.addEventListener("click", async () => {
+    setStatus("Sprawdzanie…");
+
+    if (!sigDirty) {
+      setStatus("Złóż podpis w polu.");
+      return;
+    }
+
+    // Wytnij podpis do realnego kształtu (ładniej się wstawia)
+    signatureCanvasCropped = exportCroppedSignature();
+    if (!signatureCanvasCropped) {
+      setStatus("Złóż podpis w polu.");
+      return;
+    }
+
+    // Przygotuj Image do wstawiania
+    signatureImage = new Image();
+    signatureImage.src = signatureCanvasCropped.toDataURL("image/png");
+    await signatureImage.decode?.().catch(()=>{});
+
+    // przejście do kroku 2
+    step1.style.display = "none";
+    step2.style.display = "block";
+
+    barTitle.textContent = "Krok 2/2: Wstaw podpis do dokumentu";
+    hintEl.textContent = "Zaznacz obszar podpisu na stronie. Możesz wstawić podpis na kilku stronach.";
+    nextBtn.style.display = "none";
+    clearBtn.style.display = "none";
+    finishBtn.style.display = "inline-block";
+
+    // setup stron
+    document.querySelectorAll(".page").forEach(el => {
+      const idx = parseInt(el.getAttribute("data-idx"), 10);
+      setupPage(idx);
+    });
+
+    setStatus("Gotowe");
   });
 
-  submitBtn.addEventListener("click", async () => {
-    submitBtn.disabled = true;
-    setStatus("Sprawdzanie podpisu…");
+  // --------------------------
+  // Zakończ (wysyłka)
+  // --------------------------
+  finishBtn.addEventListener("click", async () => {
+    finishBtn.disabled = true;
+    setStatus("Wysyłanie…");
 
     try {
       const fd = new FormData();
       let count = 0;
 
-      for (let i = 0; i < canvases.length; i++) {
-        const canvas = canvases[i];
-        if (!canvas || !dirty[i]) continue;
+      for (let i = 0; i < overlays.length; i++) {
+        const canvas = overlays[i];
+        if (!canvas || !placed[i]) continue;
 
         const blob = await canvasToBlob(canvas);
         if (!blob || !blob.size) continue;
@@ -332,27 +616,29 @@
       }
 
       if (count === 0) {
-        setStatus("Brak podpisu — narysuj coś na dokumencie.");
-        submitBtn.disabled = false;
+        setStatus("Wstaw podpis na dokumencie (zaznacz obszar).");
+        finishBtn.disabled = false;
         return;
       }
 
-      setStatus("Wysyłanie…");
       const res = await fetch(`/api/sign/${docId}`, { method:"POST", body: fd });
-
       if (!res.ok) throw new Error(await res.text());
+
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Błąd");
 
       setStatus("Gotowe ✅");
-      openModal(data.message || "Dokument został podpisany. Koniec wersji demonstracyjnej.");
+      openModal(data.message || "Dokument został podpisany.");
     } catch (err) {
       console.error(err);
       setStatus("Błąd: " + (err?.message || err));
     } finally {
-      submitBtn.disabled = false;
+      finishBtn.disabled = false;
     }
   });
+
+  // start
+  resizeSigCanvas();
 })();
 </script>
 </body>

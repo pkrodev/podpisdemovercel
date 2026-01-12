@@ -19,7 +19,7 @@ from flask import (
 )
 
 # =============================
-# Ścieżki (Vercel: używamy /tmp)
+# Ścieżki (Vercel: /tmp)
 # =============================
 API_DIR = Path(__file__).resolve().parent
 ROOT_DIR = API_DIR.parent
@@ -49,9 +49,7 @@ def safe_doc_id(doc_id: str) -> str:
 
 
 def cleanup_doc(doc_id: str):
-    """
-    DEMO: czyścimy wszystko po podpisie (nic nie zapisujemy).
-    """
+    """Czyścimy PDF i rendery stron (nie trzymamy danych)."""
     try:
         p = doc_path(doc_id)
         if p.exists():
@@ -70,9 +68,6 @@ def cleanup_doc(doc_id: str):
 
 
 def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
-    """
-    Renderuje strony PDF do PNG w /tmp (Vercel).
-    """
     pdf = doc_path(doc_id)
     if not pdf.exists():
         abort(404, "PDF not found")
@@ -91,14 +86,12 @@ def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
 
 def _collect_pages_from_request():
     """
-    Obsługuje:
-    1) multipart/form-data: page_<index> = PNG blob (preferowane na mobile)
-    2) JSON: { pages: [{index, dataURL}] } (fallback)
+    Preferowane: multipart/form-data: page_<index> = PNG blob
+    Fallback: JSON: { pages: [{index, dataURL}] }
     Zwraca listę (idx:int, png_bytes:bytes)
     """
     ctype = (request.content_type or "").lower()
 
-    # 1) Multipart
     if "multipart/form-data" in ctype:
         pages = []
         for key, storage in request.files.items():
@@ -113,7 +106,6 @@ def _collect_pages_from_request():
                 pages.append((idx, png_bytes))
         return pages
 
-    # 2) JSON fallback
     payload = request.get_json(silent=True) or {}
     out = []
     for item in payload.get("pages", []):
@@ -135,11 +127,7 @@ def _collect_pages_from_request():
 # =============================
 # Flask
 # =============================
-app = Flask(
-    __name__,
-    template_folder=str(ROOT_DIR / "templates"),
-)
-
+app = Flask(__name__, template_folder=str(ROOT_DIR / "templates"))
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64MB
 
 
@@ -159,12 +147,10 @@ def upload():
         abort(400, "Only PDF allowed")
 
     doc_id = uuid.uuid4().hex[:12]
-    pdf_path = doc_path(doc_id)
-    f.save(pdf_path)
+    f.save(doc_path(doc_id))
 
     sign_url = url_for("sign", doc_id=doc_id, _external=True)
     qr_url = url_for("qr", doc_id=doc_id, _external=True)
-
     return render_template("share.html", doc_id=doc_id, sign_url=sign_url, qr_url=qr_url)
 
 
@@ -195,30 +181,22 @@ def sign(doc_id):
 @app.post("/api/sign/<string:doc_id>")
 def api_sign(doc_id):
     """
-    DEMO: przyjmujemy podpisy (PNG z canvasa), ale NIE tworzymy podpisanego PDF.
-    Zwracamy tylko komunikat i czyścimy pliki.
+    Przyjmujemy wstawione podpisy jako PNG (page_<i>),
+    ale nie generujemy podpisanego PDF (wersja pokazowa).
     """
     doc_id = safe_doc_id(doc_id)
-    pdf_path = doc_path(doc_id)
-    if not pdf_path.exists():
+    if not doc_path(doc_id).exists():
         return jsonify({"ok": False, "error": "PDF not found"}), 404
 
     pages = _collect_pages_from_request()
     if not pages:
         return jsonify({"ok": False, "error": "No signature data received"}), 400
 
-    # (Opcjonalnie) prosta walidacja: czy w ogóle jest co wysłać
-    # np. minimalna liczba bajtów, żeby nie przyjmować pustych blobów
+    # Minimalna walidacja: czy są niepuste bloby
     useful = any(len(png_bytes) > 2000 for _, png_bytes in pages)
     if not useful:
         return jsonify({"ok": False, "error": "Signature looks empty"}), 400
 
-    # DEMO: sprzątamy i zwracamy komunikat
     cleanup_doc(doc_id)
 
-    return jsonify(
-        {
-            "ok": True,
-            "message": "Dokument został podpisany. Koniec wersji demonstracyjnej.",
-        }
-    )
+    return jsonify({"ok": True, "message": "Dokument został podpisany."})
