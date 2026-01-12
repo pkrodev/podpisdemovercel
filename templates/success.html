@@ -1,0 +1,22 @@
+<!-- templates/success.html -->
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Podpis PDF — Gotowe</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px;max-width:820px}
+    .card{border:1px solid #ddd;border-radius:14px;padding:18px}
+    a.btn{display:inline-block;margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid #111;background:#111;color:#fff;text-decoration:none;font-weight:700}
+    code{background:#f6f6f6;padding:2px 6px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <h1>PDF podpisany ✅</h1>
+  <div class="card">
+    <p><strong>Plik:</strong> <code>{{ filename }}</code></p>
+    <a class="btn" href="{{ download_url }}">Pobierz podpisany PDF</a>
+  </div>
+</body>
+</html>

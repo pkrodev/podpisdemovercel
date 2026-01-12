@@ -1,0 +1,28 @@
+<!-- templates/upload.html -->
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Podpis PDF — Upload</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px;max-width:820px}
+    .card{border:1px solid #ddd;border-radius:14px;padding:18px}
+    label{display:block;margin:12px 0 6px}
+    input[type=file]{width:100%}
+    button{margin-top:14px;padding:12px 14px;border-radius:10px;border:1px solid #111;background:#111;color:#fff;font-weight:600}
+    small{color:#666}
+  </style>
+</head>
+<body>
+  <h1>Podpis PDF</h1>
+  <div class="card">
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <label>Wybierz PDF</label>
+      <input type="file" name="file" accept="application/pdf" required />
+      <small>Po uploadzie dostaniesz link + QR do otwarcia na tablecie.</small><br/>
+      <button type="submit">Wyślij</button>
+    </form>
+  </div>
+</body>
+</html>

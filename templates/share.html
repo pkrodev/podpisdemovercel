@@ -1,0 +1,37 @@
+<!-- templates/share.html -->
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Podpis PDF — Link</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px;max-width:820px}
+    .card{border:1px solid #ddd;border-radius:14px;padding:18px}
+    .row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+    code{background:#f6f6f6;padding:2px 6px;border-radius:8px}
+    a.btn{display:inline-block;margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid #111;background:#111;color:#fff;text-decoration:none;font-weight:600}
+    img{border:1px solid #eee;border-radius:12px}
+  </style>
+</head>
+<body>
+  <h1>Otwórz na tablecie</h1>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <p><strong>doc_id:</strong> <code>{{ doc_id }}</code></p>
+        <p><strong>Link do podpisu:</strong><br/>
+          <a href="{{ sign_url }}">{{ sign_url }}</a>
+        </p>
+        <a class="btn" href="{{ sign_url }}">Otwórz stronę podpisu</a>
+      </div>
+
+      <div>
+        <p><strong>QR:</strong></p>
+        <img src="{{ qr_url }}" alt="QR" width="220" height="220"/>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
