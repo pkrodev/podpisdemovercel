@@ -7,8 +7,10 @@
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;color:#111}
     .wrap{max-width:920px;margin:0 auto;padding:28px 16px}
-    .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-    .top a{margin-left:auto;font-weight:900;color:#0b57d0;text-decoration:none}
+    .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+    .nav{margin-left:auto;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .nav a{font-weight:900;color:#0b57d0;text-decoration:none}
+    .nav span{font-weight:900;color:#666}
     .card{background:#fff;border:1px solid #e7e8ee;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
     .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
     @media(max-width:860px){ .grid{grid-template-columns:1fr} }
@@ -26,14 +28,19 @@
   <div class="wrap">
     <div class="top">
       <h1>Podpis dokumentu</h1>
-      <a href="/history">Historia</a>
+      <div class="nav">
+        <a href="/history">Historia</a>
+        <span>Weryfikacja dokumentów (DEMO)</span>
+        <span>Statystyki (DEMO)</span>
+        <span>Klienci (DEMO)</span>
+      </div>
     </div>
 
     <div class="card grid">
       <div>
         <div class="muted">Aktualny dokument ID: <code>{{ doc_id }}</code></div>
 
-        <p style="margin:12px 0 6px"><strong>Stały link do podpisu:</strong></p>
+        <p style="margin:12px 0 6px"><strong>Link do podpisu:</strong></p>
         <div><a id="signLink" href="{{ sign_url }}">{{ sign_url }}</a></div>
 
         <div class="btns">
@@ -42,13 +49,11 @@
           <button id="shareBtn" type="button">Udostępnij</button>
         </div>
 
-        <p class="muted" style="margin-top:12px">
-          Ten link jest stały — po wgraniu nowego pliku, odśwież stronę podpisu.
-        </p>
+        <p class="muted" style="margin-top:12px">Możesz też zeskanować kod QR.</p>
       </div>
 
       <div>
-        <div class="muted" style="margin-bottom:8px"><strong>Kod QR (stały):</strong></div>
+        <div class="muted" style="margin-bottom:8px"><strong>Kod QR:</strong></div>
         <img src="{{ qr_url }}" alt="QR do podpisu">
       </div>
     </div>

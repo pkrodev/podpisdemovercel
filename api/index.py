@@ -6,6 +6,7 @@ import base64
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any, Tuple
 
 import pymupdf as fitz  # PyMuPDF
 import qrcode
@@ -28,12 +29,11 @@ ROOT_DIR = API_DIR.parent
 
 TMP_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "pdf_sign_demo"
 DOCS_DIR = TMP_ROOT / "docs"
-RENDERS_DIR = TMP_ROOT / "renders"
 META_DIR = TMP_ROOT / "meta"
 HISTORY_FILE = TMP_ROOT / "history.json"
 CURRENT_FILE = TMP_ROOT / "current.json"
 
-for d in (DOCS_DIR, RENDERS_DIR, META_DIR):
+for d in (DOCS_DIR, META_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXT = {"pdf"}
@@ -62,7 +62,7 @@ def safe_doc_id(doc_id: str) -> str:
 
 
 def cleanup_doc_files(doc_id: str):
-    """Remove PDF and rendered PNGs for doc_id."""
+    """Remove PDF + meta for doc_id (we do not keep documents)."""
     try:
         p = doc_path(doc_id)
         if p.exists():
@@ -71,16 +71,6 @@ def cleanup_doc_files(doc_id: str):
         pass
 
     try:
-        for f in RENDERS_DIR.glob(f"{doc_id}_p*.png"):
-            try:
-                f.unlink()
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # meta (nazwa pliku) – usuń (żeby nie zostawiać śmieci)
-    try:
         mp = meta_path(doc_id)
         if mp.exists():
             mp.unlink()
@@ -88,23 +78,27 @@ def cleanup_doc_files(doc_id: str):
         pass
 
 
-def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
+def render_pdf_pages_to_dataurls(doc_id: str, zoom: float = 1.5) -> List[Dict[str, Any]]:
+    """
+    Render pages as inline base64 PNG data URLs.
+    This avoids separate /render requests (important on serverless).
+    """
     pdf = doc_path(doc_id)
     if not pdf.exists():
         abort(404, "PDF not found")
 
-    out = []
+    out: List[Dict[str, Any]] = []
     with fitz.open(pdf) as doc:
         for i, page in enumerate(doc):
             mat = fitz.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=mat, alpha=False)
-            png_name = f"{doc_id}_p{i+1}.png"
-            pix.save(RENDERS_DIR / png_name)
-            out.append({"idx": i, "name": png_name})
+            png_bytes = pix.tobytes("png")
+            data_url = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+            out.append({"idx": i, "data_url": data_url})
     return out
 
 
-def _collect_pages_from_request():
+def _collect_pages_from_request() -> List[Tuple[int, bytes]]:
     """
     Prefer: multipart/form-data: page_<index> = PNG blob
     Fallback: JSON: { pages: [{index, dataURL}] }
@@ -127,7 +121,7 @@ def _collect_pages_from_request():
         return pages
 
     payload = request.get_json(silent=True) or {}
-    out = []
+    out: List[Tuple[int, bytes]] = []
     for item in payload.get("pages", []):
         try:
             idx = int(item.get("index", -1))
@@ -147,7 +141,7 @@ def _collect_pages_from_request():
 # =============================
 # Current document pointer
 # =============================
-def get_current_doc_id() -> str | None:
+def get_current_doc_id() -> Optional[str]:
     if not CURRENT_FILE.exists():
         return None
     try:
@@ -160,12 +154,8 @@ def get_current_doc_id() -> str | None:
     return None
 
 
-def set_current_doc_id(doc_id: str, original_filename: str | None = None):
-    payload = {
-        "doc_id": doc_id,
-        "updated_at": utc_iso(),
-        "filename": original_filename or None,
-    }
+def set_current_doc_id(doc_id: str, original_filename: Optional[str] = None):
+    payload = {"doc_id": doc_id, "updated_at": utc_iso(), "filename": original_filename or None}
     try:
         CURRENT_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
@@ -173,7 +163,6 @@ def set_current_doc_id(doc_id: str, original_filename: str | None = None):
 
 
 def clear_current_if(doc_id: str):
-    """If signed doc was current -> clear pointer."""
     cur = get_current_doc_id()
     if cur and cur == doc_id:
         try:
@@ -186,7 +175,7 @@ def clear_current_if(doc_id: str):
 # =============================
 # History (JSON file)
 # =============================
-def load_history():
+def load_history() -> List[Dict[str, Any]]:
     if not HISTORY_FILE.exists():
         return []
     try:
@@ -195,7 +184,7 @@ def load_history():
         return []
 
 
-def save_history(items):
+def save_history(items: List[Dict[str, Any]]):
     try:
         HISTORY_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
@@ -213,17 +202,10 @@ def add_history_entry(doc_id: str):
             filename = None
 
     items = load_history()
-    items.append(
-        {
-            "doc_id": doc_id,
-            "filename": filename or f"{doc_id}.pdf",
-            "signed_at": utc_iso(),
-        }
-    )
+    items.append({"doc_id": doc_id, "filename": filename or f"{doc_id}.pdf", "signed_at": utc_iso()})
     items = sorted(items, key=lambda x: x.get("signed_at", ""), reverse=True)
     save_history(items)
 
-    # meta już niepotrzebne
     try:
         if mp.exists():
             mp.unlink()
@@ -240,10 +222,7 @@ app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64MB
 
 @app.get("/")
 def index():
-    # na upload możemy też wyświetlić stały link (bez current doc)
-    stable_sign_url = url_for("sign_current", _external=True)
-    stable_qr_url = url_for("qr_current", _external=True)
-    return render_template("upload.html", stable_sign_url=stable_sign_url, stable_qr_url=stable_qr_url)
+    return render_template("upload.html")
 
 
 @app.get("/history")
@@ -262,7 +241,7 @@ def upload():
     if not allowed_file(f.filename):
         abort(400, "Only PDF allowed")
 
-    # Jeśli był już "current" dokument, sprzątnij go (żeby /tmp się nie zapychał)
+    # Cleanup previous "current" to avoid /tmp growing
     old = get_current_doc_id()
     if old:
         cleanup_doc_files(old)
@@ -270,44 +249,23 @@ def upload():
     doc_id = uuid.uuid4().hex[:12]
     f.save(doc_path(doc_id))
 
-    # meta: nazwa pliku
+    # meta: filename
     try:
         meta_path(doc_id).write_text(
-            json.dumps(
-                {"original_filename": f.filename, "uploaded_at": utc_iso()},
-                ensure_ascii=False,
-                indent=2,
-            ),
+            json.dumps({"original_filename": f.filename, "uploaded_at": utc_iso()}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
     except Exception:
         pass
 
-    # Ustaw jako current
+    # set current
     set_current_doc_id(doc_id, original_filename=f.filename)
 
-    # Stable linki (dla tabletu)
+    # stable link for signing
     stable_sign_url = url_for("sign_current", _external=True)
     stable_qr_url = url_for("qr_current", _external=True)
 
-    return render_template(
-        "share.html",
-        doc_id=doc_id,
-        sign_url=stable_sign_url,
-        qr_url=stable_qr_url,
-        stable_sign_url=stable_sign_url,
-    )
-
-
-@app.get("/qr/<string:doc_id>")
-def qr(doc_id):
-    doc_id = safe_doc_id(doc_id)
-    sign_url = url_for("sign", doc_id=doc_id, _external=True)
-    img = qrcode.make(sign_url)
-    bio = BytesIO()
-    img.save(bio, format="PNG")
-    bio.seek(0)
-    return send_file(bio, mimetype="image/png")
+    return render_template("share.html", doc_id=doc_id, sign_url=stable_sign_url, qr_url=stable_qr_url)
 
 
 @app.get("/qr/current")
@@ -320,44 +278,23 @@ def qr_current():
     return send_file(bio, mimetype="image/png")
 
 
-@app.get("/render/<path:filename>")
-def render_file(filename):
-    return send_from_directory(str(RENDERS_DIR), filename)
+@app.get("/sign/current")
+def sign_current():
+    doc_id = get_current_doc_id()
+    if not doc_id:
+        return render_template("upload.html", info="Brak aktywnego dokumentu. Wyślij nowy plik PDF.")
+    return sign(doc_id)
 
 
 @app.get("/sign/<string:doc_id>")
 def sign(doc_id):
     doc_id = safe_doc_id(doc_id)
-    pages = render_pdf_pages_to_pngs(doc_id, zoom=1.6)
+    pages = render_pdf_pages_to_dataurls(doc_id, zoom=1.5)
     return render_template("sign.html", doc_id=doc_id, pages=pages)
-
-
-@app.get("/sign/current")
-def sign_current():
-    doc_id = get_current_doc_id()
-    if not doc_id:
-        # brak aktualnego dokumentu -> pokaż upload
-        stable_sign_url = url_for("sign_current", _external=True)
-        stable_qr_url = url_for("qr_current", _external=True)
-        return render_template(
-            "upload.html",
-            stable_sign_url=stable_sign_url,
-            stable_qr_url=stable_qr_url,
-            info="Brak aktywnego dokumentu. Wyślij nowy plik PDF.",
-        )
-    return sign(doc_id)
 
 
 @app.post("/api/sign/<string:doc_id>")
 def api_sign(doc_id):
-    """
-    Demo behavior:
-    - Accept per-page overlay PNGs (page_<i>)
-    - Add entry to history
-    - If it was current -> clear current pointer
-    - Cleanup PDF + renders
-    - Return confirmation message
-    """
     doc_id = safe_doc_id(doc_id)
     if not doc_path(doc_id).exists():
         return jsonify({"ok": False, "error": "PDF not found"}), 404
@@ -375,3 +312,10 @@ def api_sign(doc_id):
     cleanup_doc_files(doc_id)
 
     return jsonify({"ok": True, "message": "Dokument został podpisany."})
+
+
+# Optional: keep old /render endpoint if something still references it (now unused)
+@app.get("/render/<path:filename>")
+def render_file(filename):
+    # legacy / unused now
+    return send_from_directory(str(TMP_ROOT), filename)

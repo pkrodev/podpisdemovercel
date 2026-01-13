@@ -7,8 +7,10 @@
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;color:#111}
     .wrap{max-width:920px;margin:0 auto;padding:28px 16px}
-    .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-    .top a{margin-left:auto;font-weight:900;color:#0b57d0;text-decoration:none}
+    .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+    .nav{margin-left:auto;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .nav a{font-weight:900;color:#0b57d0;text-decoration:none}
+    .nav span{font-weight:900;color:#666}
     .card{background:#fff;border:1px solid #e7e8ee;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
     h1{margin:0;font-size:28px}
     p{margin:10px 0 16px;color:#555;line-height:1.4}
@@ -17,16 +19,18 @@
     button{cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid #111;background:#111;color:#fff;font-weight:800}
     .hint{margin-top:10px;color:#666;font-size:14px}
     .info{margin:12px 0 0;padding:12px;border-radius:14px;border:1px solid #e7e8ee;background:#fafbff;color:#333}
-    code{background:#f2f3f7;border:1px solid #e7e8ee;padding:2px 8px;border-radius:10px}
-    .stable{margin-top:14px}
-    .stable a{color:#0b57d0;word-break:break-all}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="top">
       <h1>Podpis PDF</h1>
-      <a href="/history">Historia</a>
+      <div class="nav">
+        <a href="/history">Historia</a>
+        <span>Weryfikacja dokumentów (DEMO)</span>
+        <span>Statystyki (DEMO)</span>
+        <span>Klienci (DEMO)</span>
+      </div>
     </div>
 
     <p>Wyślij dokument i podpisz go na urządzeniu mobilnym.</p>
@@ -41,13 +45,7 @@
           <input type="file" name="file" accept="application/pdf" required />
           <button type="submit">Wyślij PDF</button>
         </div>
-        <div class="hint">Po wysłaniu otrzymasz stały link i kod QR do podpisu.</div>
-
-        <div class="stable">
-          <div class="hint"><strong>Stały link do podpisu:</strong></div>
-          <div><a href="{{ stable_sign_url }}">{{ stable_sign_url }}</a></div>
-          <div class="hint" style="margin-top:6px">Po dodaniu nowego dokumentu wystarczy odświeżyć ten link.</div>
-        </div>
+        <div class="hint">Po wysłaniu otrzymasz link i kod QR do podpisu.</div>
       </form>
     </div>
   </div>

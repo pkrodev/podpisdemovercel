@@ -164,7 +164,7 @@
           </div>
 
           <div class="stage" id="stage-{{ p.idx }}">
-            <img class="pdf" id="img-{{ p.idx }}" src="/render/{{ p.name }}" alt="page {{ p.idx+1 }}">
+            <img class="pdf" id="img-{{ p.idx }}" src="{{ p.data_url }}" alt="page {{ p.idx+1 }}">
             <canvas class="overlay" id="c-{{ p.idx }}"></canvas>
             <div class="select-rect" id="r-{{ p.idx }}"></div>
           </div>
