@@ -1,11 +1,13 @@
 # api/index.py
 import os
 import uuid
+import json
 import base64
 from io import BytesIO
 from pathlib import Path
+from datetime import datetime, timezone
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # zamiast "import fitz"
 import qrcode
 from flask import (
     Flask,
@@ -27,11 +29,17 @@ ROOT_DIR = API_DIR.parent
 TMP_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "pdf_sign_demo"
 DOCS_DIR = TMP_ROOT / "docs"
 RENDERS_DIR = TMP_ROOT / "renders"
+META_DIR = TMP_ROOT / "meta"
+HISTORY_FILE = TMP_ROOT / "history.json"
 
-for d in (DOCS_DIR, RENDERS_DIR):
+for d in (DOCS_DIR, RENDERS_DIR, META_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXT = {"pdf"}
+
+
+def utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def allowed_file(filename: str) -> bool:
@@ -42,14 +50,18 @@ def doc_path(doc_id: str) -> Path:
     return DOCS_DIR / f"{doc_id}.pdf"
 
 
+def meta_path(doc_id: str) -> Path:
+    return META_DIR / f"{doc_id}.json"
+
+
 def safe_doc_id(doc_id: str) -> str:
     if not doc_id or any(c for c in doc_id if c not in "0123456789abcdef"):
         abort(400, "Invalid doc_id")
     return doc_id
 
 
-def cleanup_doc(doc_id: str):
-    """Czyścimy PDF i rendery stron (nie trzymamy danych)."""
+def cleanup_doc_files(doc_id: str):
+    """Czyścimy PDF i rendery stron."""
     try:
         p = doc_path(doc_id)
         if p.exists():
@@ -78,8 +90,7 @@ def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
             mat = fitz.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=mat, alpha=False)
             png_name = f"{doc_id}_p{i+1}.png"
-            png_path = RENDERS_DIR / png_name
-            pix.save(png_path)
+            pix.save(RENDERS_DIR / png_name)
             out.append({"idx": i, "name": png_name})
     return out
 
@@ -125,6 +136,56 @@ def _collect_pages_from_request():
 
 
 # =============================
+# Historia (plik JSON)
+# =============================
+def load_history():
+    if not HISTORY_FILE.exists():
+        return []
+    try:
+        return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def save_history(items):
+    try:
+        HISTORY_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def add_history_entry(doc_id: str):
+    # spróbuj wziąć nazwę pliku z meta
+    filename = None
+    mp = meta_path(doc_id)
+    if mp.exists():
+        try:
+            meta = json.loads(mp.read_text(encoding="utf-8"))
+            filename = meta.get("original_filename")
+        except Exception:
+            filename = None
+
+    items = load_history()
+    items.append(
+        {
+            "doc_id": doc_id,
+            "filename": filename or f"{doc_id}.pdf",
+            "signed_at": utc_iso(),
+        }
+    )
+    # newest first
+    items = sorted(items, key=lambda x: x.get("signed_at", ""), reverse=True)
+    save_history(items)
+
+    # meta już niepotrzebne
+    try:
+        if mp.exists():
+            mp.unlink()
+    except Exception:
+        pass
+
+
+# =============================
 # Flask
 # =============================
 app = Flask(__name__, template_folder=str(ROOT_DIR / "templates"))
@@ -134,6 +195,12 @@ app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64MB
 @app.get("/")
 def index():
     return render_template("upload.html")
+
+
+@app.get("/history")
+def history():
+    items = load_history()
+    return render_template("history.html", items=items)
 
 
 @app.post("/upload")
@@ -149,6 +216,19 @@ def upload():
     doc_id = uuid.uuid4().hex[:12]
     f.save(doc_path(doc_id))
 
+    # meta: nazwa pliku
+    try:
+        meta_path(doc_id).write_text(
+            json.dumps(
+                {"original_filename": f.filename, "uploaded_at": utc_iso()},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
     sign_url = url_for("sign", doc_id=doc_id, _external=True)
     qr_url = url_for("qr", doc_id=doc_id, _external=True)
     return render_template("share.html", doc_id=doc_id, sign_url=sign_url, qr_url=qr_url)
@@ -158,7 +238,6 @@ def upload():
 def qr(doc_id):
     doc_id = safe_doc_id(doc_id)
     sign_url = url_for("sign", doc_id=doc_id, _external=True)
-
     img = qrcode.make(sign_url)
     bio = BytesIO()
     img.save(bio, format="PNG")
@@ -182,7 +261,7 @@ def sign(doc_id):
 def api_sign(doc_id):
     """
     Przyjmujemy wstawione podpisy jako PNG (page_<i>),
-    ale nie generujemy podpisanego PDF (wersja pokazowa).
+    dopisujemy wpis do historii, czyścimy pliki dokumentu i zwracamy potwierdzenie.
     """
     doc_id = safe_doc_id(doc_id)
     if not doc_path(doc_id).exists():
@@ -192,11 +271,11 @@ def api_sign(doc_id):
     if not pages:
         return jsonify({"ok": False, "error": "No signature data received"}), 400
 
-    # Minimalna walidacja: czy są niepuste bloby
     useful = any(len(png_bytes) > 2000 for _, png_bytes in pages)
     if not useful:
         return jsonify({"ok": False, "error": "Signature looks empty"}), 400
 
-    cleanup_doc(doc_id)
+    add_history_entry(doc_id)
+    cleanup_doc_files(doc_id)
 
     return jsonify({"ok": True, "message": "Dokument został podpisany."})

@@ -41,9 +41,7 @@
     }
 
     /* KROK 1: podpis */
-    .sig-pad{
-      display:flex;flex-direction:column;gap:10px;
-    }
+    .sig-pad{display:flex;flex-direction:column;gap:10px}
     .sig-stage{
       position:relative;
       width:100%;
@@ -62,7 +60,6 @@
       -webkit-user-select:none;
       -webkit-touch-callout:none;
     }
-    .sig-toolbar{display:flex;gap:10px;flex-wrap:wrap}
 
     /* KROK 2: dokument */
     .page{
@@ -83,12 +80,11 @@
     }
     img.pdf{display:block;width:100%;height:auto}
 
-    /* overlay z podpisem (canvas) */
+    /* overlay z podpisem */
     canvas.overlay{
       position:absolute;left:0;top:0;
       width:100%;height:100%;
       z-index:10;
-      pointer-events:auto;
       touch-action:none;
       user-select:none;
       -webkit-user-select:none;
@@ -105,6 +101,30 @@
       pointer-events:none;
       border-radius:10px;
     }
+
+    /* Miejsce na kciuk */
+    .thumb-rest{
+      position:fixed;
+      right:14px;
+      bottom:14px;
+      width:104px;
+      height:78px;
+      border-radius:18px;
+      border:1px solid #d7d9e2;
+      background:rgba(255,255,255,.92);
+      box-shadow:0 10px 30px rgba(0,0,0,.10);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#666;
+      font-weight:900;
+      z-index:1000;
+      user-select:none;
+      -webkit-user-select:none;
+      -webkit-touch-callout:none;
+      touch-action:none;
+    }
+    .thumb-rest small{font-weight:800;color:#888}
 
     /* Modal */
     .modal{
@@ -130,18 +150,22 @@
         <div class="actions">
           <button class="primary" id="nextBtn">Dalej</button>
           <button class="danger" id="clearBtn" type="button">Wyczyść</button>
+
+          <!-- KROK 2 -->
+          <button class="primary" id="toggleInsertBtn" style="display:none">Wstaw podpis: WYŁ.</button>
           <button class="primary" id="finishBtn" style="display:none">Zakończ</button>
         </div>
       </div>
 
       <div class="statusline">
-        <div class="hint" id="hint">
-          Podpisz się palcem w polu poniżej, a następnie przejdź dalej.
-        </div>
+        <div class="hint" id="hint">Podpisz się w polu poniżej, a następnie przejdź dalej.</div>
         <div class="status" id="status">Gotowe</div>
       </div>
     </div>
   </div>
+
+  <!-- Miejsce na kciuk -->
+  <div class="thumb-rest" id="thumbRest"><small>KCIUK</small></div>
 
   <div class="wrap">
 
@@ -151,10 +175,8 @@
         <div class="sig-stage" id="sigStage">
           <canvas class="sigCanvas" id="sigCanvas"></canvas>
         </div>
-        <div class="sig-toolbar">
-          <div style="color:#666;font-size:14px">
-            Wskazówka: jeśli niechcący przewijasz ekran, rysuj wewnątrz pola podpisu.
-          </div>
+        <div style="color:#666;font-size:14px">
+          Podpisz się palcem w polu powyżej.
         </div>
       </div>
     </div>
@@ -162,9 +184,9 @@
     <!-- KROK 2 -->
     <div id="step2" style="display:none">
       <div class="card">
-        <div style="color:#111;font-weight:800;margin-bottom:6px">Krok 2/2: Wstaw podpis do dokumentu</div>
+        <div style="color:#111;font-weight:900;margin-bottom:6px">Krok 2/2: Wstaw podpis do dokumentu</div>
         <div style="color:#666;font-size:14px">
-          Na wybranej stronie dotknij i przeciągnij, aby zaznaczyć obszar podpisu. Podpis zostanie wstawiony w zaznaczone miejsce.
+          Kliknij <strong>Wstaw podpis</strong>, a następnie zaznacz obszar na dokumencie. Po wyłączeniu trybu możesz swobodnie klikać i przewijać dokument.
         </div>
       </div>
 
@@ -172,7 +194,7 @@
         <div class="page" data-idx="{{ p.idx }}">
           <div class="pagehead">
             <strong>Strona {{ p.idx + 1 }}</strong>
-            <span class="muted">zaznacz obszar podpisu</span>
+            <span class="muted">wstaw podpis w wybrane miejsce</span>
             <span class="spacer"></span>
             <button class="danger clearPageBtn" type="button">Usuń podpis ze strony</button>
           </div>
@@ -190,7 +212,7 @@
 
   <div class="modal" id="modal">
     <div class="modal-card">
-      <h2 id="modalTitle">Potwierdzenie</h2>
+      <h2>Potwierdzenie</h2>
       <p id="modalText">Dokument został podpisany.</p>
       <div class="btns">
         <button class="primary" id="modalOk">OK</button>
@@ -210,6 +232,7 @@
   const nextBtn = document.getElementById("nextBtn");
   const clearBtn = document.getElementById("clearBtn");
   const finishBtn = document.getElementById("finishBtn");
+  const toggleInsertBtn = document.getElementById("toggleInsertBtn");
 
   const step1 = document.getElementById("step1");
   const step2 = document.getElementById("step2");
@@ -219,8 +242,16 @@
   const modalOk = document.getElementById("modalOk");
   const modalClose = document.getElementById("modalClose");
 
+  const thumbRest = document.getElementById("thumbRest");
+
   const DPR = () => (window.devicePixelRatio || 1);
   function setStatus(t){ statusEl.textContent = t; }
+
+  // Thumb rest: przechwytuj dotyk, nie rób nic
+  const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+  ["pointerdown","pointermove","pointerup","touchstart","touchmove","touchend"].forEach(ev => {
+    thumbRest.addEventListener(ev, swallow, { passive:false });
+  });
 
   // --------------------------
   // KROK 1: Podpis (pad)
@@ -257,7 +288,6 @@
     let drawing = false;
     let last = null;
 
-    // Pointer
     canvas.addEventListener("pointerdown", (e) => {
       e.preventDefault(); e.stopPropagation();
       drawing = true;
@@ -288,7 +318,6 @@
     canvas.addEventListener("pointercancel", end);
     canvas.addEventListener("pointerleave", end);
 
-    // Touch fallback (passive:false)
     canvas.addEventListener("touchstart", (e) => {
       e.preventDefault(); e.stopPropagation();
       const t = e.touches[0];
@@ -333,7 +362,6 @@
     let minX = w, minY = h, maxX = 0, maxY = 0;
     let found = false;
 
-    // scan alpha channel
     for (let y = 0; y < h; y++) {
       const row = y * w * 4;
       for (let x = 0; x < w; x++) {
@@ -347,7 +375,6 @@
         }
       }
     }
-
     if (!found) return null;
 
     const pad = Math.round(Math.min(w, h) * 0.02);
@@ -368,7 +395,6 @@
     out.height = bbox.h;
 
     const octx = out.getContext("2d");
-    // skopiuj wycinek
     octx.drawImage(sigCanvas, bbox.minX, bbox.minY, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
     return out;
   }
@@ -378,10 +404,23 @@
   // --------------------------
   const overlays = [];
   const octxs = [];
-  const placed = []; // czy podpis wstawiony na stronie
+  const placed = [];
 
   let signatureImage = new Image();
   let signatureCanvasCropped = null;
+
+  let insertMode = false;
+
+  function setInsertMode(state){
+    insertMode = state;
+    toggleInsertBtn.textContent = insertMode ? "Wstaw podpis: WŁ." : "Wstaw podpis: WYŁ.";
+    // gdy WYŁ -> overlay nie łapie dotyku, można klikać/scrollować
+    overlays.forEach((c) => {
+      if (!c) return;
+      c.style.pointerEvents = insertMode ? "auto" : "none";
+    });
+    setStatus(insertMode ? "Zaznacz obszar podpisu." : "Tryb wstawiania wyłączony.");
+  }
 
   function resizeOverlayToImage(idx){
     const img = document.getElementById(`img-${idx}`);
@@ -406,13 +445,11 @@
     const canvas = overlays[idx];
     if (!ctx || !canvas || !signatureImage) return;
 
-    // wyczyść i wstaw podpis (tylko jedna instancja na stronie – prosto i czytelnie)
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const sigW = signatureImage.naturalWidth || signatureImage.width;
     const sigH = signatureImage.naturalHeight || signatureImage.height;
 
-    // dopasuj z zachowaniem proporcji, wycentruj w rect
     const scale = Math.min(rectCss.w / sigW, rectCss.h / sigH);
     const drawW = sigW * scale;
     const drawH = sigH * scale;
@@ -422,6 +459,10 @@
 
     ctx.drawImage(signatureImage, dx, dy, drawW, drawH);
     placed[idx] = true;
+
+    // po wstawieniu wyłączamy tryb (żeby znów można było klikać dokument)
+    setInsertMode(false);
+    setStatus("Podpis wstawiony.");
   }
 
   function setupPage(idx){
@@ -434,6 +475,9 @@
 
     overlays[idx] = canvas;
     placed[idx] = false;
+
+    // domyślnie WYŁ (klik/scroll działa)
+    canvas.style.pointerEvents = "none";
 
     if (img.complete) resizeOverlayToImage(idx);
     else img.addEventListener("load", () => resizeOverlayToImage(idx));
@@ -466,8 +510,8 @@
       return { x,y,w,h };
     }
 
-    // Zaznaczanie obszaru na overlay canvas (pointer + touch)
     canvas.addEventListener("pointerdown", (e) => {
+      if (!insertMode) return;
       e.preventDefault(); e.stopPropagation();
       selecting = true;
       canvas.setPointerCapture?.(e.pointerId);
@@ -476,7 +520,7 @@
     });
 
     canvas.addEventListener("pointermove", (e) => {
-      if (!selecting) return;
+      if (!insertMode || !selecting) return;
       e.preventDefault(); e.stopPropagation();
       const cur = clientToStage(e.clientX, e.clientY);
       const r = normalizeRect(start, cur);
@@ -484,7 +528,7 @@
     });
 
     canvas.addEventListener("pointerup", (e) => {
-      if (!selecting) return;
+      if (!insertMode || !selecting) return;
       e.preventDefault(); e.stopPropagation();
       selecting = false;
       const end = clientToStage(e.clientX, e.clientY);
@@ -496,39 +540,9 @@
         return;
       }
       placeSignatureOnPage(idx, r);
-      setStatus("Podpis wstawiony.");
     });
 
     canvas.addEventListener("pointercancel", () => { selecting=false; hideRect(); });
-
-    canvas.addEventListener("touchstart", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const t = e.touches[0];
-      selecting = true;
-      start = clientToStage(t.clientX, t.clientY);
-      showRect(start.x, start.y, 1, 1);
-    }, { passive:false });
-
-    canvas.addEventListener("touchmove", (e) => {
-      if (!selecting) return;
-      e.preventDefault(); e.stopPropagation();
-      const t = e.touches[0];
-      const cur = clientToStage(t.clientX, t.clientY);
-      const r = normalizeRect(start, cur);
-      showRect(r.x, r.y, r.w, r.h);
-    }, { passive:false });
-
-    canvas.addEventListener("touchend", (e) => {
-      if (!selecting) return;
-      e.preventDefault(); e.stopPropagation();
-      selecting = false;
-      hideRect();
-      // touchend nie ma clientX/Y, więc bierzemy ostatni rectEl
-      const w = parseFloat(rectEl.style.width || "0");
-      const h = parseFloat(rectEl.style.height || "0");
-      // jeśli rect był ukryty, nie mamy już wymiarów — więc nie robimy nic
-      // (pointer events w praktyce i tak obsłużą większość urządzeń)
-    }, { passive:false });
 
     clearPageBtn.addEventListener("click", () => {
       const ctx = octxs[idx];
@@ -562,35 +576,37 @@
       return;
     }
 
-    // Wytnij podpis do realnego kształtu (ładniej się wstawia)
     signatureCanvasCropped = exportCroppedSignature();
     if (!signatureCanvasCropped) {
       setStatus("Złóż podpis w polu.");
       return;
     }
 
-    // Przygotuj Image do wstawiania
     signatureImage = new Image();
     signatureImage.src = signatureCanvasCropped.toDataURL("image/png");
     await signatureImage.decode?.().catch(()=>{});
 
-    // przejście do kroku 2
     step1.style.display = "none";
     step2.style.display = "block";
 
     barTitle.textContent = "Krok 2/2: Wstaw podpis do dokumentu";
-    hintEl.textContent = "Zaznacz obszar podpisu na stronie. Możesz wstawić podpis na kilku stronach.";
+    hintEl.textContent = "Kliknij „Wstaw podpis”, zaznacz obszar, a następnie możesz dalej swobodnie przeglądać dokument.";
     nextBtn.style.display = "none";
     clearBtn.style.display = "none";
+    toggleInsertBtn.style.display = "inline-block";
     finishBtn.style.display = "inline-block";
 
-    // setup stron
     document.querySelectorAll(".page").forEach(el => {
       const idx = parseInt(el.getAttribute("data-idx"), 10);
       setupPage(idx);
     });
 
+    setInsertMode(false);
     setStatus("Gotowe");
+  });
+
+  toggleInsertBtn.addEventListener("click", () => {
+    setInsertMode(!insertMode);
   });
 
   // --------------------------
@@ -616,7 +632,7 @@
       }
 
       if (count === 0) {
-        setStatus("Wstaw podpis na dokumencie (zaznacz obszar).");
+        setStatus("Wstaw podpis na dokumencie.");
         finishBtn.disabled = false;
         return;
       }
@@ -637,7 +653,6 @@
     }
   });
 
-  // start
   resizeSigCanvas();
 })();
 </script>

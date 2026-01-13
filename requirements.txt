@@ -1,5 +1,4 @@
-# requirements.txt
+PyMuPDF>=1.24.11
 Flask==3.0.3
-PyMuPDF==1.24.9
 qrcode==7.4.2
 Pillow==10.4.0
