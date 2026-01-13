@@ -31,6 +31,7 @@ DOCS_DIR = TMP_ROOT / "docs"
 RENDERS_DIR = TMP_ROOT / "renders"
 META_DIR = TMP_ROOT / "meta"
 HISTORY_FILE = TMP_ROOT / "history.json"
+CURRENT_FILE = TMP_ROOT / "current.json"
 
 for d in (DOCS_DIR, RENDERS_DIR, META_DIR):
     d.mkdir(parents=True, exist_ok=True)
@@ -75,6 +76,14 @@ def cleanup_doc_files(doc_id: str):
                 f.unlink()
             except Exception:
                 pass
+    except Exception:
+        pass
+
+    # meta (nazwa pliku) – usuń (żeby nie zostawiać śmieci)
+    try:
+        mp = meta_path(doc_id)
+        if mp.exists():
+            mp.unlink()
     except Exception:
         pass
 
@@ -136,6 +145,45 @@ def _collect_pages_from_request():
 
 
 # =============================
+# Current document pointer
+# =============================
+def get_current_doc_id() -> str | None:
+    if not CURRENT_FILE.exists():
+        return None
+    try:
+        data = json.loads(CURRENT_FILE.read_text(encoding="utf-8"))
+        doc_id = data.get("doc_id")
+        if isinstance(doc_id, str) and doc_id:
+            return safe_doc_id(doc_id)
+    except Exception:
+        return None
+    return None
+
+
+def set_current_doc_id(doc_id: str, original_filename: str | None = None):
+    payload = {
+        "doc_id": doc_id,
+        "updated_at": utc_iso(),
+        "filename": original_filename or None,
+    }
+    try:
+        CURRENT_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def clear_current_if(doc_id: str):
+    """If signed doc was current -> clear pointer."""
+    cur = get_current_doc_id()
+    if cur and cur == doc_id:
+        try:
+            if CURRENT_FILE.exists():
+                CURRENT_FILE.unlink()
+        except Exception:
+            pass
+
+
+# =============================
 # History (JSON file)
 # =============================
 def load_history():
@@ -175,6 +223,7 @@ def add_history_entry(doc_id: str):
     items = sorted(items, key=lambda x: x.get("signed_at", ""), reverse=True)
     save_history(items)
 
+    # meta już niepotrzebne
     try:
         if mp.exists():
             mp.unlink()
@@ -191,7 +240,10 @@ app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64MB
 
 @app.get("/")
 def index():
-    return render_template("upload.html")
+    # na upload możemy też wyświetlić stały link (bez current doc)
+    stable_sign_url = url_for("sign_current", _external=True)
+    stable_qr_url = url_for("qr_current", _external=True)
+    return render_template("upload.html", stable_sign_url=stable_sign_url, stable_qr_url=stable_qr_url)
 
 
 @app.get("/history")
@@ -210,9 +262,15 @@ def upload():
     if not allowed_file(f.filename):
         abort(400, "Only PDF allowed")
 
+    # Jeśli był już "current" dokument, sprzątnij go (żeby /tmp się nie zapychał)
+    old = get_current_doc_id()
+    if old:
+        cleanup_doc_files(old)
+
     doc_id = uuid.uuid4().hex[:12]
     f.save(doc_path(doc_id))
 
+    # meta: nazwa pliku
     try:
         meta_path(doc_id).write_text(
             json.dumps(
@@ -225,15 +283,36 @@ def upload():
     except Exception:
         pass
 
-    sign_url = url_for("sign", doc_id=doc_id, _external=True)
-    qr_url = url_for("qr", doc_id=doc_id, _external=True)
-    return render_template("share.html", doc_id=doc_id, sign_url=sign_url, qr_url=qr_url)
+    # Ustaw jako current
+    set_current_doc_id(doc_id, original_filename=f.filename)
+
+    # Stable linki (dla tabletu)
+    stable_sign_url = url_for("sign_current", _external=True)
+    stable_qr_url = url_for("qr_current", _external=True)
+
+    return render_template(
+        "share.html",
+        doc_id=doc_id,
+        sign_url=stable_sign_url,
+        qr_url=stable_qr_url,
+        stable_sign_url=stable_sign_url,
+    )
 
 
 @app.get("/qr/<string:doc_id>")
 def qr(doc_id):
     doc_id = safe_doc_id(doc_id)
     sign_url = url_for("sign", doc_id=doc_id, _external=True)
+    img = qrcode.make(sign_url)
+    bio = BytesIO()
+    img.save(bio, format="PNG")
+    bio.seek(0)
+    return send_file(bio, mimetype="image/png")
+
+
+@app.get("/qr/current")
+def qr_current():
+    sign_url = url_for("sign_current", _external=True)
     img = qrcode.make(sign_url)
     bio = BytesIO()
     img.save(bio, format="PNG")
@@ -253,12 +332,29 @@ def sign(doc_id):
     return render_template("sign.html", doc_id=doc_id, pages=pages)
 
 
+@app.get("/sign/current")
+def sign_current():
+    doc_id = get_current_doc_id()
+    if not doc_id:
+        # brak aktualnego dokumentu -> pokaż upload
+        stable_sign_url = url_for("sign_current", _external=True)
+        stable_qr_url = url_for("qr_current", _external=True)
+        return render_template(
+            "upload.html",
+            stable_sign_url=stable_sign_url,
+            stable_qr_url=stable_qr_url,
+            info="Brak aktywnego dokumentu. Wyślij nowy plik PDF.",
+        )
+    return sign(doc_id)
+
+
 @app.post("/api/sign/<string:doc_id>")
 def api_sign(doc_id):
     """
     Demo behavior:
     - Accept per-page overlay PNGs (page_<i>)
     - Add entry to history
+    - If it was current -> clear current pointer
     - Cleanup PDF + renders
     - Return confirmation message
     """
@@ -275,6 +371,7 @@ def api_sign(doc_id):
         return jsonify({"ok": False, "error": "Signature looks empty"}), 400
 
     add_history_entry(doc_id)
+    clear_current_if(doc_id)
     cleanup_doc_files(doc_id)
 
     return jsonify({"ok": True, "message": "Dokument został podpisany."})

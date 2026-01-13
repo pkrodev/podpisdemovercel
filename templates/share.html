@@ -31,9 +31,9 @@
 
     <div class="card grid">
       <div>
-        <div class="muted">Identyfikator: <code>{{ doc_id }}</code></div>
+        <div class="muted">Aktualny dokument ID: <code>{{ doc_id }}</code></div>
 
-        <p style="margin:12px 0 6px"><strong>Link do podpisu:</strong></p>
+        <p style="margin:12px 0 6px"><strong>Stały link do podpisu:</strong></p>
         <div><a id="signLink" href="{{ sign_url }}">{{ sign_url }}</a></div>
 
         <div class="btns">
@@ -42,11 +42,13 @@
           <button id="shareBtn" type="button">Udostępnij</button>
         </div>
 
-        <p class="muted" style="margin-top:12px">Możesz też zeskanować kod QR.</p>
+        <p class="muted" style="margin-top:12px">
+          Ten link jest stały — po wgraniu nowego pliku, odśwież stronę podpisu.
+        </p>
       </div>
 
       <div>
-        <div class="muted" style="margin-bottom:8px"><strong>Kod QR:</strong></div>
+        <div class="muted" style="margin-bottom:8px"><strong>Kod QR (stały):</strong></div>
         <img src="{{ qr_url }}" alt="QR do podpisu">
       </div>
     </div>

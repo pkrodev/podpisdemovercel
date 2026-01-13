@@ -16,6 +16,10 @@
     input[type=file]{flex:1;min-width:240px;padding:12px;border-radius:12px;border:1px solid #d7d9e2;background:#fff}
     button{cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid #111;background:#111;color:#fff;font-weight:800}
     .hint{margin-top:10px;color:#666;font-size:14px}
+    .info{margin:12px 0 0;padding:12px;border-radius:14px;border:1px solid #e7e8ee;background:#fafbff;color:#333}
+    code{background:#f2f3f7;border:1px solid #e7e8ee;padding:2px 8px;border-radius:10px}
+    .stable{margin-top:14px}
+    .stable a{color:#0b57d0;word-break:break-all}
   </style>
 </head>
 <body>
@@ -27,13 +31,23 @@
 
     <p>Wyślij dokument i podpisz go na urządzeniu mobilnym.</p>
 
+    {% if info %}
+      <div class="info">{{ info }}</div>
+    {% endif %}
+
     <div class="card">
       <form action="/upload" method="post" enctype="multipart/form-data">
         <div class="row">
           <input type="file" name="file" accept="application/pdf" required />
           <button type="submit">Wyślij PDF</button>
         </div>
-        <div class="hint">Po wysłaniu otrzymasz link i kod QR do podpisu.</div>
+        <div class="hint">Po wysłaniu otrzymasz stały link i kod QR do podpisu.</div>
+
+        <div class="stable">
+          <div class="hint"><strong>Stały link do podpisu:</strong></div>
+          <div><a href="{{ stable_sign_url }}">{{ stable_sign_url }}</a></div>
+          <div class="hint" style="margin-top:6px">Po dodaniu nowego dokumentu wystarczy odświeżyć ten link.</div>
+        </div>
       </form>
     </div>
   </div>
