@@ -7,10 +7,12 @@
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;color:#111}
     .wrap{max-width:920px;margin:0 auto;padding:28px 16px}
+    .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+    .top a{margin-left:auto;font-weight:900;color:#0b57d0;text-decoration:none}
     .card{background:#fff;border:1px solid #e7e8ee;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
     .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
     @media(max-width:860px){ .grid{grid-template-columns:1fr} }
-    h1{margin:0 0 12px}
+    h1{margin:0}
     .muted{color:#666;font-size:14px}
     code{background:#f2f3f7;border:1px solid #e7e8ee;padding:3px 8px;border-radius:10px}
     a{color:#0b57d0;word-break:break-all}
@@ -22,7 +24,10 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Podpis dokumentu</h1>
+    <div class="top">
+      <h1>Podpis dokumentu</h1>
+      <a href="/history">Historia</a>
+    </div>
 
     <div class="card grid">
       <div>

@@ -7,9 +7,11 @@
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;color:#111}
     .wrap{max-width:920px;margin:0 auto;padding:28px 16px}
+    .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+    .top a{margin-left:auto;font-weight:900;color:#0b57d0;text-decoration:none}
     .card{background:#fff;border:1px solid #e7e8ee;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
-    h1{margin:0 0 8px;font-size:28px}
-    p{margin:0 0 16px;color:#555;line-height:1.4}
+    h1{margin:0;font-size:28px}
+    p{margin:10px 0 16px;color:#555;line-height:1.4}
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
     input[type=file]{flex:1;min-width:240px;padding:12px;border-radius:12px;border:1px solid #d7d9e2;background:#fff}
     button{cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid #111;background:#111;color:#fff;font-weight:800}
@@ -18,7 +20,11 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Podpis PDF</h1>
+    <div class="top">
+      <h1>Podpis PDF</h1>
+      <a href="/history">Historia</a>
+    </div>
+
     <p>Wyślij dokument i podpisz go na urządzeniu mobilnym.</p>
 
     <div class="card">

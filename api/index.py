@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timezone
 
-import pymupdf as fitz  # zamiast "import fitz"
+import pymupdf as fitz  # PyMuPDF
 import qrcode
 from flask import (
     Flask,
@@ -21,7 +21,7 @@ from flask import (
 )
 
 # =============================
-# Ścieżki (Vercel: /tmp)
+# Paths (Vercel: /tmp)
 # =============================
 API_DIR = Path(__file__).resolve().parent
 ROOT_DIR = API_DIR.parent
@@ -61,7 +61,7 @@ def safe_doc_id(doc_id: str) -> str:
 
 
 def cleanup_doc_files(doc_id: str):
-    """Czyścimy PDF i rendery stron."""
+    """Remove PDF and rendered PNGs for doc_id."""
     try:
         p = doc_path(doc_id)
         if p.exists():
@@ -97,9 +97,9 @@ def render_pdf_pages_to_pngs(doc_id: str, zoom: float = 1.6):
 
 def _collect_pages_from_request():
     """
-    Preferowane: multipart/form-data: page_<index> = PNG blob
+    Prefer: multipart/form-data: page_<index> = PNG blob
     Fallback: JSON: { pages: [{index, dataURL}] }
-    Zwraca listę (idx:int, png_bytes:bytes)
+    Returns list[(idx:int, png_bytes:bytes)]
     """
     ctype = (request.content_type or "").lower()
 
@@ -136,7 +136,7 @@ def _collect_pages_from_request():
 
 
 # =============================
-# Historia (plik JSON)
+# History (JSON file)
 # =============================
 def load_history():
     if not HISTORY_FILE.exists():
@@ -155,7 +155,6 @@ def save_history(items):
 
 
 def add_history_entry(doc_id: str):
-    # spróbuj wziąć nazwę pliku z meta
     filename = None
     mp = meta_path(doc_id)
     if mp.exists():
@@ -173,11 +172,9 @@ def add_history_entry(doc_id: str):
             "signed_at": utc_iso(),
         }
     )
-    # newest first
     items = sorted(items, key=lambda x: x.get("signed_at", ""), reverse=True)
     save_history(items)
 
-    # meta już niepotrzebne
     try:
         if mp.exists():
             mp.unlink()
@@ -216,7 +213,6 @@ def upload():
     doc_id = uuid.uuid4().hex[:12]
     f.save(doc_path(doc_id))
 
-    # meta: nazwa pliku
     try:
         meta_path(doc_id).write_text(
             json.dumps(
@@ -260,8 +256,11 @@ def sign(doc_id):
 @app.post("/api/sign/<string:doc_id>")
 def api_sign(doc_id):
     """
-    Przyjmujemy wstawione podpisy jako PNG (page_<i>),
-    dopisujemy wpis do historii, czyścimy pliki dokumentu i zwracamy potwierdzenie.
+    Demo behavior:
+    - Accept per-page overlay PNGs (page_<i>)
+    - Add entry to history
+    - Cleanup PDF + renders
+    - Return confirmation message
     """
     doc_id = safe_doc_id(doc_id)
     if not doc_path(doc_id).exists():
